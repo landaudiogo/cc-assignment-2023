@@ -1,0 +1,6 @@
+[workspace]
+
+members = [
+    "notifications-service", 
+    "experiment-producer"
+]
