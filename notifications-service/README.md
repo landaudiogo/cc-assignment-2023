@@ -1,4 +1,5 @@
-Notfication service that logs 
+Notfication service that logs latency between the notification and the
+measurement
 
 # External Dependencies
 
