@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 poem-openapi = { version = "3", features = ["swagger-ui"]}
-poem = "1"
+poem = { version = "1", features = ["test"] }
 tokio = { version = "1", features = ["full"]}
 serde = "1.0.183"
 serde_json = "1.0.104"

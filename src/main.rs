@@ -3,7 +3,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use poem::{
     listener::TcpListener, 
     web::Data, 
-    Route, EndpointExt
+    test::TestClient,
+    Route, EndpointExt, IntoEndpoint
 };
 use poem_openapi::{
     payload::{Json, PlainText}, 
@@ -85,7 +86,7 @@ impl Api {
 
         let cipher_components: Vec<_> = body.0.cipher_data.split(".").collect();
         if cipher_components.len() != 2 {
-            return Err(NotifyErrorResponse::BadRequest(PlainText(String::from("Invalid cipher."))))
+            return Err(NotifyErrorResponse::BadRequest(PlainText(String::from("Invalid cipher"))))
         }
 
         let key: &[u8] = secret_key.0.as_bytes();
@@ -93,7 +94,7 @@ impl Api {
         let cipher = Aes256Gcm::new(&key);
         let nonce = general_purpose::STANDARD_NO_PAD.decode(cipher_components[0])
             .map_err(|_| { 
-                NotifyErrorResponse::BadRequest(PlainText("Malformed b64 encoded nonce.".into())) 
+                NotifyErrorResponse::BadRequest(PlainText("Malformed b64 encoded nonce".into())) 
             })?;
         let nonce = GenericArray::clone_from_slice(&nonce[..]);
         let ciphertext = general_purpose::STANDARD_NO_PAD.decode(cipher_components[1])
@@ -109,7 +110,7 @@ impl Api {
         let plaintext = String::from_utf8(plaintext)
             .map_err(|_| {
                 NotifyErrorResponse::InternalServerError(
-                    PlainText("Could not decode into utf8 string.".into())
+                    PlainText("Could not decode into utf8 string".into())
                 ) 
             })?;
         
@@ -149,7 +150,8 @@ impl Api {
             .expect("Time went backwards");
         let current_time: f64 = current_time.as_secs() as f64 * 1000_f64
             + current_time.subsec_nanos() as f64 / 1_000_000_f64;
-        info!("measurement_id: {}\tlatency: {}s", body.measurement_id, (current_time - hash_data.timestamp)/(1000_f64));
+        info!("measurement_id: {}\tlatency: {}s", 
+              body.measurement_id, (current_time - hash_data.timestamp)/(1000_f64));
 
         Ok(NotifyResponse::Ok)
     }
@@ -206,5 +208,222 @@ async fn main() -> Result<(), std::io::Error> {
 
 #[cfg(test)]
 mod test { 
+    use poem::middleware::AddDataEndpoint;
+    use super::*;
+    
+    const SECRET_KEY: &str = "QJUHsPhnA0eiqHuJqsPgzhDozYO4f1zh";
 
+    fn message_for_comparison() -> String {
+        json!({
+            "notification_type": NotificationType::OutOfRange, 
+            "researcher": "d.landau@uu.nl",
+            "experiment_id": "5678", 
+            "measurement_id": "1234", 
+            "timestamp": 1692029115000.4314,
+        }).to_json_string()
+    }
+
+    fn create_cipher_data(message: String) -> String {
+        let secret_key = SecretKey(SECRET_KEY.into());
+        let key: &[u8] = secret_key.0.as_bytes();
+        let key = Key::<Aes256Gcm>::from_slice(key);
+        let cipher = Aes256Gcm::new(&key);
+        let nonce = Aes256Gcm::generate_nonce(&mut OsRng); // 96-bits; unique per message
+        let ciphertext = cipher.encrypt(&nonce, message.as_bytes().as_ref()).unwrap();
+
+        let b64_cipher: String = general_purpose::STANDARD_NO_PAD.encode(ciphertext);
+        let b64_nonce: String = general_purpose::STANDARD_NO_PAD.encode(nonce);
+        b64_nonce + "." + &b64_cipher
+
+    }
+
+    fn get_client() -> TestClient<AddDataEndpoint<Route, SecretKey>> {
+        let secret_key = SecretKey(SECRET_KEY.into());
+        let api_service = OpenApiService::new(Api, "Hello World", "1.0")
+            .server("http://localhost:3000/api");
+        let app = Route::new()
+            .nest("/api", api_service)
+            .data(secret_key);
+        TestClient::new(app)
+    }
+
+    #[tokio::test]
+    async fn post_notify_valid_request() {
+        let client = get_client();
+        let message = message_for_comparison();
+        let mut res = client
+            .post("/api/notify")
+            .body_json(&json!({
+                "notification_type": "OutOfRange",
+                "researcher": "d.landau@uu.nl",
+                "measurement_id": "1234",
+                "experiment_id": "5678",
+                "cipher_data": create_cipher_data(message)
+            })) 
+            .send().await;
+        assert_eq!(res.0.take_body().into_string().await.unwrap(), "");
+        assert_eq!(res.0.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn post_notify_invalid_cipher_composition() {
+        let client = get_client();
+        let mut res = client
+            .post("/api/notify")
+            .body_json(&json!({
+                "notification_type": "OutOfRange",
+                "researcher": "d.landau@uu.nl",
+                "measurement_id": "1234",
+                "experiment_id": "5678",
+                "cipher_data": "R8n76xYE4v/AUk1X5hM/+kkLHH5KYdoDpKiz7dUxybXaq++DcjXcuqM4GxNFg/jbvjmTnS/rh7FKoXvjJu1sg4Gc/cELVkDJ+ZWl0HTS81AfyQQmFH/CID53T3ynTtFmYATtWCnGxWiHffo/RFVSNXdQQvb2x5YBFA4DX7mznPpaC3qzwtzGEGgYtkDkzS0cVC4Kd5gWgJwInx7SHBIoflHZvfzUi329vIU"
+            })) 
+            .send().await;
+        assert_eq!(res.0.status(), 400);
+        assert_eq!(res.0.take_body().into_string().await.unwrap(), "Invalid cipher");
+    }
+
+    #[tokio::test]
+    async fn post_notify_invalid_b64_nonce() {
+        let client = get_client();
+        let mut res = client
+            .post("/api/notify")
+            .body_json(&json!({
+                "notification_type": "OutOfRange",
+                "researcher": "d.landau@uu.nl",
+                "measurement_id": "1234",
+                "experiment_id": "5678",
+                "cipher_data": "~8n76xYE4v/AUk1X.5hM/+kkLHH5KYdoDpKiz7dUxybXaq++DcjXcuqM4GxNFg/jbvjmTnS/rh7FKoXvjJu1sg4Gc/cELVkDJ+ZWl0HTS81AfyQQmFH/CID53T3ynTtFmYATtWCnGxWiHffo/RFVSNXdQQvb2x5YBFA4DX7mznPpaC3qzwtzGEGgYtkDkzS0cVC4Kd5gWgJwInx7SHBIoflHZvfzUi329vIU"
+            })) 
+            .send().await;
+        assert_eq!(res.0.status(), 400);
+        assert_eq!(res.0.take_body().into_string().await.unwrap(), "Malformed b64 encoded nonce");
+    }
+
+    #[tokio::test]
+    async fn post_notify_invalid_b64_ciphertext() {
+        let client = get_client();
+        let mut res = client
+            .post("/api/notify")
+            .body_json(&json!({
+                "notification_type": "OutOfRange",
+                "researcher": "d.landau@uu.nl",
+                "measurement_id": "1234",
+                "experiment_id": "5678",
+                "cipher_data": "R8n76xYE4v/AUk1X.~hM/+kkLHH5KYdoDpKiz7dUxybXaq++DcjXcuqM4GxNFg/jbvjmTnS/rh7FKoXvjJu1sg4Gc/cELVkDJ+ZWl0HTS81AfyQQmFH/CID53T3ynTtFmYATtWCnGxWiHffo/RFVSNXdQQvb2x5YBFA4DX7mznPpaC3qzwtzGEGgYtkDkzS0cVC4Kd5gWgJwInx7SHBIoflHZvfzUi329vIU"
+            })) 
+            .send().await;
+        assert_eq!(res.0.status(), 400);
+        assert_eq!(res.0.take_body().into_string().await.unwrap(), "Malformed b64 encoded ciphertext");
+    }
+
+    #[tokio::test]
+    async fn post_notify_not_encrypted_with_server_key() {
+        let client = get_client();
+        let mut res = client
+            .post("/api/notify")
+            .body_json(&json!({
+                "notification_type": "OutOfRange",
+                "researcher": "d.landau@uu.nl",
+                "measurement_id": "1234",
+                "experiment_id": "5678",
+                "cipher_data": "S8n76xYE4v/AUk1X.5hM/+kkLHH5KYdoDpKiz7dUxybXaq++DcjXcuqM4GxNFg/jbvjmTnS/rh7FKoXvjJu1sg4Gc/cELVkDJ+ZWl0HTS81AfyQQmFH/CID53T3ynTtFmYATtWCnGxWiHffo/RFVSNXdQQvb2x5YBFA4DX7mznPpaC3qzwtzGEGgYtkDkzS0cVC4Kd5gWgJwInx7SHBIoflHZvfzUi329vIU"
+            })) 
+            .send().await;
+        assert_eq!(res.0.status(), 400);
+        assert_eq!(res.0.take_body().into_string().await.unwrap(), 
+                   "Cipher text not encrypted with provided nonce and server key");
+    }
+
+    #[tokio::test]
+    async fn post_notify_incompatible_measurement_id() {
+        let message = message_for_comparison();
+        let client = get_client();
+        let mut res = client
+            .post("/api/notify")
+            .body_json(&json!({
+                "notification_type": "OutOfRange",
+                "researcher": "d.landau@uu.nl",
+                "measurement_id": "234",
+                "experiment_id": "5678",
+                "cipher_data": create_cipher_data(message)
+            })) 
+            .send().await;
+        assert_eq!(res.0.status(), 400);
+        assert_eq!(res.0.take_body().into_string().await.unwrap(), 
+                   "Unexpected measurement_id `234`. Expected `1234`");
+    }
+
+    #[tokio::test]
+    async fn post_notify_incompatible_experiment_id() {
+        let message = message_for_comparison();
+        let client = get_client();
+        let mut res = client
+            .post("/api/notify")
+            .body_json(&json!({
+                "notification_type": "OutOfRange",
+                "researcher": "d.landau@uu.nl",
+                "measurement_id": "1234",
+                "experiment_id": "678",
+                "cipher_data": create_cipher_data(message)
+            })) 
+            .send().await;
+        assert_eq!(res.0.status(), 400);
+        assert_eq!(res.0.take_body().into_string().await.unwrap(), 
+                   "Unexpected experiment_id `678`. Expected `5678`");
+    }
+
+    #[tokio::test]
+    async fn post_notify_incompatible_researcher() {
+        let message = message_for_comparison();
+        let client = get_client();
+        let mut res = client
+            .post("/api/notify")
+            .body_json(&json!({
+                "notification_type": "OutOfRange",
+                "researcher": "diogo.landau@uu.nl",
+                "measurement_id": "1234",
+                "experiment_id": "5678",
+                "cipher_data": create_cipher_data(message)
+            })) 
+            .send().await;
+        assert_eq!(res.0.status(), 400);
+        assert_eq!(res.0.take_body().into_string().await.unwrap(), 
+                   "Unexpected researcher `diogo.landau@uu.nl`. Expected `d.landau@uu.nl`");
+    }
+
+    #[tokio::test]
+    async fn post_notify_incompatible_notification_type() {
+        let message = message_for_comparison();
+        let client = get_client();
+        let mut res = client
+            .post("/api/notify")
+            .body_json(&json!({
+                "notification_type": "Stabilized",
+                "researcher": "d.landau@uu.nl",
+                "measurement_id": "1234",
+                "experiment_id": "5678",
+                "cipher_data": create_cipher_data(message)
+            })) 
+            .send().await;
+        assert_eq!(res.0.status(), 400);
+        assert_eq!(res.0.take_body().into_string().await.unwrap(), 
+                   "Unexpected notification_type `Stabilized`. Expected `OutOfRange`");
+    }
+
+    #[tokio::test]
+    async fn post_notify_invalid_data_types() {
+        let message = message_for_comparison();
+        let client = get_client();
+        let res = client
+            .post("/api/notify")
+            .body_json(&json!({
+                "notification_type": "NotInEnum",
+                "researcher": "d.landau@uu.nl",
+                "measurement_id": "1234",
+                "experiment_id": "678",
+                "cipher_data": create_cipher_data(message)
+            })) 
+            .send().await;
+        assert_eq!(res.0.status(), 400);
+    }
 }
