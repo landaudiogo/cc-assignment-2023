@@ -2,5 +2,6 @@
 
 members = [
     "notifications-service", 
-    "experiment-producer"
+    "experiment-producer",
+    "event-hash",
 ]

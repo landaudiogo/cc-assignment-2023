@@ -1,21 +1,17 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use aes_gcm::{
-    aead::{Aead, KeyInit},
-    Aes256Gcm,
-    Key, // Or `Aes128Gcm`
-};
 use poem::{listener::TcpListener, web::Data, EndpointExt, Route};
 use poem_openapi::{
     payload::{Json, PlainText},
     ApiResponse, Enum, Object, OpenApi, OpenApiService,
 };
 
-use base64::{engine::general_purpose, Engine as _};
 use clap::Parser;
 use generic_array::GenericArray;
 use serde::{Deserialize, Serialize};
 use tracing::{info, Level};
+
+use event_hash::{DecryptError, HashData};
 
 #[derive(Parser, Debug)]
 struct CliArgs {
@@ -39,15 +35,6 @@ struct NotifyBody {
     measurement_id: String,
     experiment_id: String,
     cipher_data: String,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct HashData {
-    notification_type: NotificationType,
-    researcher: String,
-    experiment_id: String,
-    measurement_id: String,
-    timestamp: f64,
 }
 
 #[derive(ApiResponse)]
@@ -80,44 +67,26 @@ impl Api {
     ) -> Result<NotifyResponse, NotifyErrorResponse> {
         let secret_key = data_secret_key.0;
 
-        let cipher_components: Vec<_> = body.0.cipher_data.split(".").collect();
-        if cipher_components.len() != 2 {
-            return Err(NotifyErrorResponse::BadRequest(PlainText(String::from(
-                "Invalid cipher",
-            ))));
-        }
-
         let key: &[u8] = secret_key.0.as_bytes();
-        let key = Key::<Aes256Gcm>::from_slice(key);
-        let cipher = Aes256Gcm::new(&key);
-        let nonce = general_purpose::STANDARD_NO_PAD
-            .decode(cipher_components[0])
-            .map_err(|_| {
+        let hash_data = HashData::decrypt(key, &body.0.cipher_data).map_err(|e| match e {
+            DecryptError::MalformedHashDataString => {
+                NotifyErrorResponse::BadRequest(PlainText("Invalid cipher".into()))
+            }
+            DecryptError::MalformedB64Nonce => {
                 NotifyErrorResponse::BadRequest(PlainText("Malformed b64 encoded nonce".into()))
-            })?;
-        let nonce = GenericArray::clone_from_slice(&nonce[..]);
-        let ciphertext = general_purpose::STANDARD_NO_PAD
-            .decode(cipher_components[1])
-            .map_err(|_| {
-                NotifyErrorResponse::BadRequest(PlainText(
-                    "Malformed b64 encoded ciphertext".into(),
-                ))
-            })?;
-        let plaintext = cipher.decrypt(&nonce, ciphertext.as_ref()).map_err(|_| {
-            NotifyErrorResponse::BadRequest(PlainText(
+            }
+            DecryptError::MalformedB64Ciphertext => NotifyErrorResponse::BadRequest(PlainText(
+                "Malformed b64 encoded ciphertext".into(),
+            )),
+            DecryptError::DecryptionError => NotifyErrorResponse::BadRequest(PlainText(
                 "Cipher text not encrypted with provided nonce and server key".into(),
-            ))
-        })?;
-        let plaintext = String::from_utf8(plaintext).map_err(|_| {
-            NotifyErrorResponse::InternalServerError(PlainText(
+            )),
+            DecryptError::Utf8DecodingError => NotifyErrorResponse::InternalServerError(PlainText(
                 "Could not decode into utf8 string".into(),
-            ))
-        })?;
-
-        let hash_data: HashData = serde_json::from_str(&plaintext).map_err(|_| {
-            NotifyErrorResponse::InternalServerError(PlainText(
-                "Could not deserialize json string into HashData.".into(),
-            ))
+            )),
+            DecryptError::JsonDeserializationError => NotifyErrorResponse::InternalServerError(
+                PlainText("Could not deserialize json string into HashData.".into()),
+            ),
         })?;
 
         // validate contents passed in body with the contents in the ciphertext
@@ -136,7 +105,9 @@ impl Api {
                 "Unexpected researcher `{}`. Expected `{}`",
                 body.researcher, hash_data.researcher
             ))));
-        } else if hash_data.notification_type != body.notification_type {
+        } else if serde_json::to_string(&hash_data.notification_type).unwrap()
+            != serde_json::to_string(&body.notification_type).unwrap()
+        {
             return Err(NotifyErrorResponse::BadRequest(PlainText(format!(
                 "Unexpected notification_type `{:?}`. Expected `{:?}`",
                 body.notification_type, hash_data.notification_type
@@ -184,6 +155,12 @@ async fn main() -> Result<(), std::io::Error> {
 mod test {
     use super::*;
     use aes_gcm::aead::{AeadCore, OsRng};
+    use aes_gcm::{
+        aead::{Aead, KeyInit},
+        Aes256Gcm,
+        Key, // Or `Aes128Gcm`
+    };
+    use base64::{engine::general_purpose, Engine as _};
     use poem::middleware::AddDataEndpoint;
     use poem::test::TestClient;
     use poem_openapi::types::ToJSON;

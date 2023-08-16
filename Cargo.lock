@@ -514,6 +514,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "event-hash"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "base64 0.21.2",
+ "generic-array",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "experiment-producer"
 version = "0.1.0"
 dependencies = [
@@ -1038,6 +1049,7 @@ dependencies = [
  "aes-gcm",
  "base64 0.21.2",
  "clap",
+ "event-hash",
  "generic-array",
  "poem",
  "poem-openapi",
