@@ -167,8 +167,8 @@ async fn main() -> Result<(), std::io::Error> {
     let secret_key = SecretKey(args.secret_key);
     info!("Notifications service secret key: {:?}", secret_key);
 
-    let api_service =
-        OpenApiService::new(Api, "Notifications Service", "1.0").server("http://localhost:3000/api");
+    let api_service = OpenApiService::new(Api, "Notifications Service", "1.0")
+        .server("http://localhost:3000/api");
     let ui = api_service.swagger_ui();
     let app = Route::new()
         .nest("/api", api_service)

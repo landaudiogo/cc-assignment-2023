@@ -11,7 +11,7 @@
             "type": "string"
         },
         {
-            "name": "measurement-id",
+            "name": "measurement_id",
             "type": "string"
         },
         {
@@ -21,6 +21,10 @@
         {
             "name": "temperature", 
             "type": "float"
+        }, 
+        {
+            "name": "measurement_hash", 
+            "type": "string"
         }
     ]
 }
