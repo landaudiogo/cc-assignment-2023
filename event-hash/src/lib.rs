@@ -1,5 +1,5 @@
 use aes_gcm::{
-    aead::{Aead, KeyInit},
+    aead::{Aead, KeyInit, OsRng, AeadCore},
     Aes256Gcm,
     Key, // Or `Aes128Gcm`
 };
@@ -15,7 +15,7 @@ pub enum NotificationType {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct HashData {
-    pub notification_type: NotificationType,
+    pub notification_type: Option<NotificationType>,
     pub researcher: String,
     pub experiment_id: String,
     pub measurement_id: String,
@@ -65,19 +65,15 @@ impl HashData {
             serde_json::from_str(&plaintext).map_err(|_| DecryptError::JsonDeserializationError)?;
         Ok(hash_data)
     }
-}
 
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
-}
+    pub fn encrypt(&self, key: &[u8]) -> String { 
+        let key = Key::<Aes256Gcm>::from_slice(key);
+        let cipher = Aes256Gcm::new(&key);
+        let nonce = Aes256Gcm::generate_nonce(&mut OsRng); // 96-bits; unique per message
+        let ciphertext = cipher.encrypt(&nonce, serde_json::to_string(&self).unwrap().as_bytes()).unwrap();
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
+        let b64_cipher: String = general_purpose::STANDARD_NO_PAD.encode(ciphertext);
+        let b64_nonce: String = general_purpose::STANDARD_NO_PAD.encode(nonce);
+        b64_nonce + "." + &b64_cipher
     }
 }

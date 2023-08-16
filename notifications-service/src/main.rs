@@ -105,12 +105,23 @@ impl Api {
                 "Unexpected researcher `{}`. Expected `{}`",
                 body.researcher, hash_data.researcher
             ))));
-        } else if serde_json::to_string(&hash_data.notification_type).unwrap()
+        } 
+
+        // TODO remove unwrap, this can be null
+        if let None = hash_data.notification_type {
+            return Err(NotifyErrorResponse::BadRequest(PlainText(format!(
+                "Unexpected notification. Measurement `{}` should not have been notified",
+                hash_data.measurement_id
+            ))));
+        }
+        
+        let hash_notif_type = hash_data.notification_type.unwrap();
+        if serde_json::to_string(&hash_notif_type).unwrap()
             != serde_json::to_string(&body.notification_type).unwrap()
         {
             return Err(NotifyErrorResponse::BadRequest(PlainText(format!(
                 "Unexpected notification_type `{:?}`. Expected `{:?}`",
-                body.notification_type, hash_data.notification_type
+                body.notification_type, hash_notif_type
             ))));
         }
 
@@ -179,6 +190,17 @@ mod test {
         .to_json_string()
     }
 
+    fn create_hash_data() -> HashData {
+        HashData {
+            notification_type: Some(event_hash::NotificationType::OutOfRange),
+            researcher: "d.landau@uu.nl".into(),
+            experiment_id: "5678".into(),
+            measurement_id: "1234".into(),
+            timestamp: 1692029115.4314,
+        }
+
+    }
+
     fn create_cipher_data(message: String) -> String {
         let secret_key = SecretKey(SECRET_KEY.into());
         let key: &[u8] = secret_key.0.as_bytes();
@@ -203,13 +225,16 @@ mod test {
     #[tokio::test]
     async fn post_notify_valid_request() {
         let client = get_client();
-        let message = message_for_comparison();
+        let hash_data = create_hash_data();
+        let secret_key = SecretKey(SECRET_KEY.into());
+        let key: &[u8] = secret_key.0.as_bytes();
+        let cipher_data = hash_data.encrypt(key);
         let body = json!({
             "notification_type": "OutOfRange",
             "researcher": "d.landau@uu.nl",
             "measurement_id": "1234",
             "experiment_id": "5678",
-            "cipher_data": create_cipher_data(message)
+            "cipher_data": cipher_data
         });
         let mut res = client.post("/api/notify").body_json(&body).send().await;
         assert_eq!(res.0.take_body().into_string().await.unwrap(), "");
