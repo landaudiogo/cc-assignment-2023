@@ -1,14 +1,15 @@
-use std::time::{SystemTime, UNIX_EPOCH};
-use std::fs;
 use apache_avro::types::{Record, Value};
 use apache_avro::{Schema, Writer};
-use rdkafka::message::ToBytes;
-use uuid::Uuid;
 use rand::Rng;
+use rdkafka::message::ToBytes;
+use std::fs;
+use uuid::Uuid;
 
-use crate::simulator::{
-    IntoIter, TempRange
-};
+use event_hash::{HashData, NotificationType};
+
+use crate::simulator::{self, IterMut, ExperimentStage, TemperatureSample};
+use crate::time;
+
 
 /// `Vec<u8>` wrapper
 ///
@@ -62,12 +63,7 @@ pub fn stabilization_started_event(experiment_id: &str) -> EventWrapper {
     let mut record = Record::new(writer.schema()).unwrap();
     record.put("experiment", experiment_id);
 
-    let current_time = SystemTime::now();
-    let current_time = current_time
-        .duration_since(UNIX_EPOCH)
-        .expect("Time went backwards");
-    let current_time: f64 =
-        current_time.as_secs() as f64 + current_time.subsec_nanos() as f64 / 1_000_000_000_f64;
+    let current_time = time::current_epoch();
     record.put("timestamp", Value::Double(current_time));
     writer.append(record).unwrap();
 
@@ -83,12 +79,7 @@ pub fn experiment_started_event(experiment_id: &str) -> EventWrapper {
     let mut record = Record::new(writer.schema()).unwrap();
     record.put("experiment", experiment_id);
 
-    let current_time = SystemTime::now();
-    let current_time = current_time
-        .duration_since(UNIX_EPOCH)
-        .expect("Time went backwards");
-    let current_time: f64 =
-        current_time.as_secs() as f64 + current_time.subsec_nanos() as f64 / 1_000_000_000_f64;
+    let current_time = time::current_epoch();
     record.put("timestamp", Value::Double(current_time));
     writer.append(record).unwrap();
 
@@ -104,12 +95,7 @@ pub fn experiment_terminated_event(experiment_id: &str) -> EventWrapper {
     let mut record = Record::new(writer.schema()).unwrap();
     record.put("experiment", experiment_id);
 
-    let current_time = SystemTime::now();
-    let current_time = current_time
-        .duration_since(UNIX_EPOCH)
-        .expect("Time went backwards");
-    let current_time: f64 =
-        current_time.as_secs() as f64 + current_time.subsec_nanos() as f64 / 1_000_000_000_f64;
+    let current_time = time::current_epoch();
     record.put("timestamp", Value::Double(current_time));
 
     writer.append(record).unwrap();
@@ -141,54 +127,81 @@ pub fn temperature_measured_event(
     EventWrapper(writer.into_inner().unwrap())
 }
 
-pub fn stabilization_events<'a>(
-    sample_iter: IntoIter,
+fn compute_notification_type(curr_sample: TemperatureSample, prev_sample: Option<TemperatureSample>, stage: &ExperimentStage) -> Option<NotificationType> {
+    println!("{:#?}", prev_sample);
+    println!("{:#?}", curr_sample);
+    match (stage, prev_sample) {
+        (ExperimentStage::Stabilization, Some(prev_sample)) => {
+            if !curr_sample.is_out_of_range() && prev_sample.is_out_of_range() {
+                Some(NotificationType::Stabilized)
+            } else {
+                None
+            }
+        }, 
+        (ExperimentStage::CarryOut, Some(prev_sample)) => {
+            if curr_sample.is_out_of_range() && !prev_sample.is_out_of_range() {
+                println!("=== Out of Range ===\n\n");
+                Some(NotificationType::OutOfRange)
+            } else {
+                None
+            }
+        }, 
+        (ExperimentStage::Stabilization, None) => {
+            if !curr_sample.is_out_of_range() {
+                Some(NotificationType::Stabilized)
+            } else {
+                None
+            }
+        },
+        (ExperimentStage::CarryOut, None) => {
+            if curr_sample.is_out_of_range() {
+                Some(NotificationType::OutOfRange)
+            } else {
+                None
+            }
+        },
+        (_, _) => {
+            None
+        }
+    }
+}
+
+// TODO 
+// key paramater
+pub fn temperature_events<'a>(
+    sample_iter: IterMut<'a>,
     experiment_id: &'a str,
+    researcher: &'a str,
     sensors: &'a Vec<String>,
-    temp_range: TempRange,
 ) -> Box<dyn Iterator<Item = Vec<EventWrapper>> + 'a> {
     let mut prev_sample = None;
+    let stage = sample_iter.experiment.stage();
 
     Box::new(sample_iter.map(move |sample| {
         // let prev = prev_sample.unwrap();
         let measurement_id = &format!("{}", Uuid::new_v4());
-        let measurement_hash = "abcd.efgh";
-        let current_time = SystemTime::now();
-        let current_time = current_time
-            .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards");
-        let current_time: f64 =
-            current_time.as_secs() as f64 + current_time.subsec_nanos() as f64 / 1_000_000_000_f64;
+        let current_time = time::current_epoch();
 
-        let mut total_temperature = 0.0;
+        let hash_data = HashData {
+            notification_type: compute_notification_type(sample, prev_sample, &stage),
+            timestamp: current_time,
+            experiment_id: experiment_id.into(), 
+            measurement_id: measurement_id.into(), 
+            researcher: researcher.into(),
+        };
+        println!("{:#?}", hash_data);
+        let measurement_hash = hash_data.encrypt("QJUHsPhnA0eiqHuJqsPgzhDozYO4f1zh".as_bytes());
         prev_sample = Some(sample);
-        let mut sensor_events = sensors[..sensors.len() - 1]
-            .iter()
-            .map(|sensor_id| {
-                let relative_diff = rand::thread_rng().gen_range(-100.0..100.0);
-                let sensor_temperature = sample.cur() + relative_diff * 1.0 / 100.0;
-                total_temperature += sensor_temperature;
-                temperature_measured_event(
-                    experiment_id,
-                    measurement_id,
-                    sensor_id,
-                    sensor_temperature,
-                    current_time,
-                    measurement_hash,
-                )
-            })
-            .collect::<Vec<EventWrapper>>();
-        let last_sensor_id = &sensors[sensors.len() - 1];
-        let last_sensor_temperature = (sensors.len() as f32) * sample.cur() - total_temperature;
-        sensor_events.push(temperature_measured_event(
-            experiment_id,
-            measurement_id,
-            &last_sensor_id,
-            last_sensor_temperature,
-            current_time,
-            measurement_hash,
-        ));
-        sensor_events
+
+        simulator::compute_sensor_temperatures(&sensors, sample.cur()).into_iter().map(|(sensor_id, sensor_temperature)| {
+            temperature_measured_event(
+                experiment_id,
+                measurement_id,
+                sensor_id,
+                sensor_temperature,
+                current_time,
+                &measurement_hash,
+            )
+        }).collect()
     }))
 }
-

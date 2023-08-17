@@ -2,14 +2,14 @@ use apache_avro::Reader;
 use rdkafka::config::ClientConfig;
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use std::time::Duration;
-use tokio::time;
+use tokio::time as tktime;
 use uuid::Uuid;
 
 mod events;
+mod simulator;
+mod time;
 
-mod simulator; 
-use simulator::TempRange;
-
+use simulator::{TempRange, ExperimentStage, Experiment};
 
 #[tokio::main]
 async fn main() {
@@ -30,6 +30,7 @@ async fn main() {
     ];
     let temp_range = TempRange::new(25.5, 26.5).unwrap();
 
+    let mut experiment = Experiment::new(6.0, temp_range);
     producer
         .send(
             FutureRecord::to(topic_name)
@@ -43,9 +44,12 @@ async fn main() {
                 .key(&experiment_id),
             Duration::from_secs(0),
         )
-        .await.unwrap();
+        .await
+        .unwrap();
     println!("Experiment Configured Event");
+    tktime::sleep(Duration::from_millis(2000)).await;
 
+    experiment.set_stage(ExperimentStage::Stabilization);
     producer
         .send(
             FutureRecord::to(topic_name)
@@ -53,12 +57,13 @@ async fn main() {
                 .key(&experiment_id),
             Duration::from_secs(0),
         )
-        .await.unwrap();
+        .await
+        .unwrap();
     println!("Stabilization Started Event");
 
-    let stabilization_samples = simulator::stabilization_samples(6.0, temp_range, 2);
+    let stabilization_samples = experiment.stabilization_samples(2);
     let stabilization_events =
-        events::stabilization_events(stabilization_samples, &experiment_id, &sensors, temp_range);
+        events::temperature_events(stabilization_samples, &experiment_id, &researcher, &sensors);
     for sensor_events in stabilization_events {
         for event in sensor_events {
             producer
@@ -68,33 +73,59 @@ async fn main() {
                         .key(&experiment_id),
                     Duration::from_secs(0),
                 )
-                .await.unwrap();
+                .await
+                .unwrap();
             let reader = Reader::new(&event.0[..]).unwrap();
             for value in reader {
-                println!("{:?}", value);
+                println!("{:?}", &value.unwrap());
             }
         }
         println!("Temperature Measured Events");
-        time::sleep(Duration::from_millis(2000)).await;
+        tktime::sleep(Duration::from_millis(100)).await;
     }
 
-    let delivery_status = producer
+    experiment.set_stage(ExperimentStage::CarryOut);
+    producer
         .send(
             FutureRecord::to(topic_name)
                 .payload(&events::experiment_started_event(&experiment_id))
                 .key(&experiment_id),
             Duration::from_secs(0),
         )
-        .await;
-    println!("delivery status {:?}", delivery_status);
+        .await.unwrap();
+    println!("Experiment Started Event");
 
-    let delivery_status = producer
+    let carry_out_samples = experiment.carry_out_samples(20);
+    let carry_out_events =
+        events::temperature_events(carry_out_samples, &experiment_id, &researcher, &sensors);
+    for sensor_events in carry_out_events {
+        for event in sensor_events {
+            producer
+                .send(
+                    FutureRecord::to(topic_name)
+                        .payload(&event)
+                        .key(&experiment_id),
+                    Duration::from_secs(0),
+                )
+                .await
+                .unwrap();
+            let reader = Reader::new(&event.0[..]).unwrap();
+            for value in reader {
+                println!("{:?}", &value.unwrap());
+            }
+        }
+        println!("Temperature Measured Events\n\n");
+        tktime::sleep(Duration::from_millis(100)).await;
+    }
+
+    experiment.set_stage(ExperimentStage::Terminated);
+    producer
         .send(
             FutureRecord::to(topic_name)
                 .payload(&events::experiment_terminated_event(&experiment_id))
                 .key(&experiment_id),
             Duration::from_secs(0),
         )
-        .await;
-    println!("delivery status {:?}", delivery_status);
+        .await.unwrap();
+    println!("Experiment Terminated");
 }

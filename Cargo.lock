@@ -530,6 +530,7 @@ version = "0.1.0"
 dependencies = [
  "apache-avro",
  "clap",
+ "event-hash",
  "rand",
  "rdkafka",
  "serde",
