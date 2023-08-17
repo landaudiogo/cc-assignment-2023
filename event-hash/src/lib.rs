@@ -1,5 +1,5 @@
 use aes_gcm::{
-    aead::{Aead, KeyInit, OsRng, AeadCore},
+    aead::{Aead, AeadCore, KeyInit, OsRng},
     Aes256Gcm,
     Key, // Or `Aes128Gcm`
 };
@@ -66,11 +66,13 @@ impl HashData {
         Ok(hash_data)
     }
 
-    pub fn encrypt(&self, key: &[u8]) -> String { 
+    pub fn encrypt(&self, key: &[u8]) -> String {
         let key = Key::<Aes256Gcm>::from_slice(key);
         let cipher = Aes256Gcm::new(&key);
         let nonce = Aes256Gcm::generate_nonce(&mut OsRng); // 96-bits; unique per message
-        let ciphertext = cipher.encrypt(&nonce, serde_json::to_string(&self).unwrap().as_bytes()).unwrap();
+        let ciphertext = cipher
+            .encrypt(&nonce, serde_json::to_string(&self).unwrap().as_bytes())
+            .unwrap();
 
         let b64_cipher: String = general_purpose::STANDARD_NO_PAD.encode(ciphertext);
         let b64_nonce: String = general_purpose::STANDARD_NO_PAD.encode(nonce);

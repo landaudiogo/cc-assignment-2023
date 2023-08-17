@@ -1,15 +1,18 @@
 use apache_avro::types::{Record, Value};
 use apache_avro::{Schema, Writer};
-use rand::Rng;
-use rdkafka::message::ToBytes;
-use std::fs;
+use rdkafka::{
+    config::ClientConfig,
+    error::KafkaError,
+    message::{OwnedMessage, ToBytes},
+    producer::{FutureProducer, FutureRecord},
+};
+use std::{fs, time::Duration};
 use uuid::Uuid;
 
 use event_hash::{HashData, NotificationType};
 
-use crate::simulator::{self, IterMut, ExperimentStage, TemperatureSample};
+use crate::simulator::{self, ExperimentStage, IterMut, TemperatureSample};
 use crate::time;
-
 
 /// `Vec<u8>` wrapper
 ///
@@ -127,7 +130,11 @@ pub fn temperature_measured_event(
     EventWrapper(writer.into_inner().unwrap())
 }
 
-fn compute_notification_type(curr_sample: TemperatureSample, prev_sample: Option<TemperatureSample>, stage: &ExperimentStage) -> Option<NotificationType> {
+fn compute_notification_type(
+    curr_sample: TemperatureSample,
+    prev_sample: Option<TemperatureSample>,
+    stage: &ExperimentStage,
+) -> Option<NotificationType> {
     println!("{:#?}", prev_sample);
     println!("{:#?}", curr_sample);
     match (stage, prev_sample) {
@@ -137,7 +144,7 @@ fn compute_notification_type(curr_sample: TemperatureSample, prev_sample: Option
             } else {
                 None
             }
-        }, 
+        }
         (ExperimentStage::CarryOut, Some(prev_sample)) => {
             if curr_sample.is_out_of_range() && !prev_sample.is_out_of_range() {
                 println!("=== Out of Range ===\n\n");
@@ -145,28 +152,26 @@ fn compute_notification_type(curr_sample: TemperatureSample, prev_sample: Option
             } else {
                 None
             }
-        }, 
+        }
         (ExperimentStage::Stabilization, None) => {
             if !curr_sample.is_out_of_range() {
                 Some(NotificationType::Stabilized)
             } else {
                 None
             }
-        },
+        }
         (ExperimentStage::CarryOut, None) => {
             if curr_sample.is_out_of_range() {
                 Some(NotificationType::OutOfRange)
             } else {
                 None
             }
-        },
-        (_, _) => {
-            None
         }
+        (_, _) => None,
     }
 }
 
-// TODO 
+// TODO
 // key paramater
 pub fn temperature_events<'a>(
     sample_iter: IterMut<'a>,
@@ -185,23 +190,69 @@ pub fn temperature_events<'a>(
         let hash_data = HashData {
             notification_type: compute_notification_type(sample, prev_sample, &stage),
             timestamp: current_time,
-            experiment_id: experiment_id.into(), 
-            measurement_id: measurement_id.into(), 
+            experiment_id: experiment_id.into(),
+            measurement_id: measurement_id.into(),
             researcher: researcher.into(),
         };
         println!("{:#?}", hash_data);
         let measurement_hash = hash_data.encrypt("QJUHsPhnA0eiqHuJqsPgzhDozYO4f1zh".as_bytes());
         prev_sample = Some(sample);
 
-        simulator::compute_sensor_temperatures(&sensors, sample.cur()).into_iter().map(|(sensor_id, sensor_temperature)| {
-            temperature_measured_event(
-                experiment_id,
-                measurement_id,
-                sensor_id,
-                sensor_temperature,
-                current_time,
-                &measurement_hash,
-            )
-        }).collect()
+        simulator::compute_sensor_temperatures(&sensors, sample.cur())
+            .into_iter()
+            .map(|(sensor_id, sensor_temperature)| {
+                temperature_measured_event(
+                    experiment_id,
+                    measurement_id,
+                    sensor_id,
+                    sensor_temperature,
+                    current_time,
+                    &measurement_hash,
+                )
+            })
+            .collect()
     }))
+}
+
+pub struct RecordData<K: ToBytes, T: ToBytes> {
+    pub payload: T,
+    pub key: Option<K>,
+}
+
+pub struct KafkaTopicProducer {
+    topic: String,
+    producer: FutureProducer, // partition: Option<usize>
+}
+
+impl KafkaTopicProducer {
+    pub fn new(brokers: &str, topic: &str) -> Self {
+        let producer: FutureProducer = ClientConfig::new()
+            .set("bootstrap.servers", brokers)
+            .set("message.timeout.ms", "5000")
+            .create()
+            .expect("Producer creation error");
+        KafkaTopicProducer {
+            topic: topic.into(),
+            producer,
+        }
+    }
+
+    pub async fn send_event<'a, K, T>(
+        &self,
+        record: RecordData<K, T>,
+    ) -> Result<(i32, i64), (KafkaError, OwnedMessage)>
+    where
+        T: ToBytes,
+        K: ToBytes,
+    {
+        let mut future_record: FutureRecord<'_, K, T> =
+            FutureRecord::to(&self.topic).payload(&record.payload);
+        if let Some(key) = future_record.key {
+            future_record = future_record.key(&key);
+        }
+
+        self.producer
+            .send(future_record, Duration::from_secs(0))
+            .await
+    }
 }

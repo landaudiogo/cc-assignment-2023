@@ -1,12 +1,11 @@
 use rand::Rng;
 
-
 #[derive(Clone, Copy)]
 pub enum ExperimentStage {
-    Configuration, 
-    Stabilization, 
+    Configuration,
+    Stabilization,
     CarryOut,
-    Terminated
+    Terminated,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -45,13 +44,19 @@ impl TemperatureSample {
 
 pub struct Experiment {
     sample: TemperatureSample,
-    stage: ExperimentStage
+    stage: ExperimentStage,
 }
 
 impl Experiment {
     pub fn new(start: f32, temp_range: TempRange) -> Self {
-        let sample = TemperatureSample { cur: start, temp_range };
-        Experiment { sample, stage: ExperimentStage::Configuration }
+        let sample = TemperatureSample {
+            cur: start,
+            temp_range,
+        };
+        Experiment {
+            sample,
+            stage: ExperimentStage::Configuration,
+        }
     }
 
     pub fn iter_mut(&mut self, delta: f32, len: usize, random_range: f32) -> IterMut {
@@ -86,13 +91,13 @@ impl Experiment {
         self.stage = stage;
     }
 
-    pub fn stage(&self) -> ExperimentStage { 
+    pub fn stage(&self) -> ExperimentStage {
         self.stage
     }
 }
 
 pub struct IterMut<'a> {
-    pub experiment: &'a mut Experiment, 
+    pub experiment: &'a mut Experiment,
     delta: f32,
     len: usize,
     iteration: usize,
@@ -119,7 +124,10 @@ impl<'a> Iterator for IterMut<'a> {
     }
 }
 
-pub fn compute_sensor_temperatures(sensors: &Vec<String>, average_temperature: f32) -> Vec<(&'_ str, f32)> {
+pub fn compute_sensor_temperatures(
+    sensors: &Vec<String>,
+    average_temperature: f32,
+) -> Vec<(&'_ str, f32)> {
     let mut cumulative_temperature = 0.0;
     let mut sensor_events = sensors[..sensors.len() - 1]
         .into_iter()
@@ -131,8 +139,8 @@ pub fn compute_sensor_temperatures(sensors: &Vec<String>, average_temperature: f
         })
         .collect::<Vec<(&'_ str, f32)>>();
     let last_sensor_id = &sensors[sensors.len() - 1];
-    let last_sensor_temperature = (sensors.len() as f32) *average_temperature - cumulative_temperature;
+    let last_sensor_temperature =
+        (sensors.len() as f32) * average_temperature - cumulative_temperature;
     sensor_events.push((last_sensor_id, last_sensor_temperature));
     sensor_events
 }
-

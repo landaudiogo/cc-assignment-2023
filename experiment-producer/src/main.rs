@@ -1,6 +1,3 @@
-use apache_avro::Reader;
-use rdkafka::config::ClientConfig;
-use rdkafka::producer::{FutureProducer, FutureRecord};
 use std::time::Duration;
 use tokio::time as tktime;
 use uuid::Uuid;
@@ -9,17 +6,15 @@ mod events;
 mod simulator;
 mod time;
 
-use simulator::{TempRange, ExperimentStage, Experiment};
+use events::{KafkaTopicProducer, RecordData};
+use simulator::{Experiment, ExperimentStage, TempRange};
 
 #[tokio::main]
 async fn main() {
+    /* Configuration */
     let brokers: &str = "localhost:43489";
     let topic_name: &str = "experiment";
-    let producer: &FutureProducer = &ClientConfig::new()
-        .set("bootstrap.servers", brokers)
-        .set("message.timeout.ms", "5000")
-        .create()
-        .expect("Producer creation error");
+    let topic_producer = KafkaTopicProducer::new(brokers, topic_name);
 
     let experiment_id = Uuid::new_v4();
     let experiment_id = format!("{}", experiment_id);
@@ -29,103 +24,83 @@ async fn main() {
         String::from("ac5e0ea2-a04d-4eb3-a6e3-206d47ffe9e1"),
     ];
     let temp_range = TempRange::new(25.5, 26.5).unwrap();
+    let sample_rate = 100;
+    /* End Configuration */
 
     let mut experiment = Experiment::new(6.0, temp_range);
-    producer
-        .send(
-            FutureRecord::to(topic_name)
-                .payload(&events::experiment_configured_event(
-                    &experiment_id,
-                    &researcher,
-                    &sensors,
-                    25.5,
-                    26.5,
-                ))
-                .key(&experiment_id),
-            Duration::from_secs(0),
-        )
-        .await
-        .unwrap();
-    println!("Experiment Configured Event");
+
+    // Experiemnt Configured Event
+    let record = RecordData {
+        payload: events::experiment_configured_event(
+            &experiment_id,
+            &researcher,
+            &sensors,
+            25.5,
+            26.5,
+        ),
+        key: Some(&experiment_id),
+    };
+    let delivery_result = topic_producer.send_event(record).await;
+    println!("Experiment Configured Event {:?}", delivery_result);
     tktime::sleep(Duration::from_millis(2000)).await;
 
+    // Stabilization Started
     experiment.set_stage(ExperimentStage::Stabilization);
-    producer
-        .send(
-            FutureRecord::to(topic_name)
-                .payload(&events::stabilization_started_event(&experiment_id))
-                .key(&experiment_id),
-            Duration::from_secs(0),
-        )
-        .await
-        .unwrap();
-    println!("Stabilization Started Event");
+    let record = RecordData {
+        payload: events::stabilization_started_event(&experiment_id),
+        key: Some(&experiment_id),
+    };
+    let delivery_result = topic_producer.send_event(record).await;
+    println!("Stabilization Started Event {:?}", delivery_result);
 
+    // Stabilization Temperature Samples
     let stabilization_samples = experiment.stabilization_samples(2);
     let stabilization_events =
         events::temperature_events(stabilization_samples, &experiment_id, &researcher, &sensors);
     for sensor_events in stabilization_events {
         for event in sensor_events {
-            producer
-                .send(
-                    FutureRecord::to(topic_name)
-                        .payload(&event)
-                        .key(&experiment_id),
-                    Duration::from_secs(0),
-                )
-                .await
-                .unwrap();
-            let reader = Reader::new(&event.0[..]).unwrap();
-            for value in reader {
-                println!("{:?}", &value.unwrap());
-            }
+            let record = RecordData {
+                payload: event,
+                key: Some(&experiment_id),
+            };
+            let delivery_result = topic_producer.send_event(record).await;
+            println!("sensor measurement result {:?}", delivery_result);
         }
         println!("Temperature Measured Events");
-        tktime::sleep(Duration::from_millis(100)).await;
+        tktime::sleep(Duration::from_millis(sample_rate)).await;
     }
 
+    // Experiment Started
     experiment.set_stage(ExperimentStage::CarryOut);
-    producer
-        .send(
-            FutureRecord::to(topic_name)
-                .payload(&events::experiment_started_event(&experiment_id))
-                .key(&experiment_id),
-            Duration::from_secs(0),
-        )
-        .await.unwrap();
-    println!("Experiment Started Event");
+    let record = RecordData {
+        payload: events::experiment_started_event(&experiment_id),
+        key: Some(&experiment_id),
+    };
+    let delivery_result = topic_producer.send_event(record).await;
+    println!("Experiment Started Event {:?}", delivery_result);
 
     let carry_out_samples = experiment.carry_out_samples(20);
     let carry_out_events =
         events::temperature_events(carry_out_samples, &experiment_id, &researcher, &sensors);
     for sensor_events in carry_out_events {
         for event in sensor_events {
-            producer
-                .send(
-                    FutureRecord::to(topic_name)
-                        .payload(&event)
-                        .key(&experiment_id),
-                    Duration::from_secs(0),
-                )
-                .await
-                .unwrap();
-            let reader = Reader::new(&event.0[..]).unwrap();
-            for value in reader {
-                println!("{:?}", &value.unwrap());
-            }
+            let record = RecordData {
+                payload: event,
+                key: Some(&experiment_id),
+            };
+            let delivery_result = topic_producer.send_event(record).await;
+            println!("sensor measurement result {:?}", delivery_result);
         }
         println!("Temperature Measured Events\n\n");
-        tktime::sleep(Duration::from_millis(100)).await;
+        tktime::sleep(Duration::from_millis(sample_rate)).await;
     }
 
+    // Experiment Terminated
     experiment.set_stage(ExperimentStage::Terminated);
-    producer
-        .send(
-            FutureRecord::to(topic_name)
-                .payload(&events::experiment_terminated_event(&experiment_id))
-                .key(&experiment_id),
-            Duration::from_secs(0),
-        )
-        .await.unwrap();
-    println!("Experiment Terminated");
+    let record = RecordData {
+        payload: events::experiment_terminated_event(&experiment_id),
+        key: Some(&experiment_id),
+    };
+    let delivery_result = topic_producer.send_event(record).await;
+    println!("Experiment Terminated Event {:?}", delivery_result);
 }

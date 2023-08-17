@@ -1,6 +1,5 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-
 pub fn current_epoch() -> f64 {
     let current_time = SystemTime::now();
     let current_time = current_time

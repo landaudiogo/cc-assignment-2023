@@ -105,7 +105,7 @@ impl Api {
                 "Unexpected researcher `{}`. Expected `{}`",
                 body.researcher, hash_data.researcher
             ))));
-        } 
+        }
 
         // TODO remove unwrap, this can be null
         if let None = hash_data.notification_type {
@@ -114,7 +114,7 @@ impl Api {
                 hash_data.measurement_id
             ))));
         }
-        
+
         let hash_notif_type = hash_data.notification_type.unwrap();
         if serde_json::to_string(&hash_notif_type).unwrap()
             != serde_json::to_string(&body.notification_type).unwrap()
@@ -198,7 +198,6 @@ mod test {
             measurement_id: "1234".into(),
             timestamp: 1692029115.4314,
         }
-
     }
 
     fn create_cipher_data(message: String) -> String {
