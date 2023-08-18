@@ -1,7 +1,12 @@
 use rand::Rng;
+use std::time::Duration;
+use tokio::time;
+
+use crate::events::{self, KafkaTopicProducer, RecordData};
 
 #[derive(Clone, Copy)]
 pub enum ExperimentStage {
+    Uninitialized,
     Configuration,
     Stabilization,
     CarryOut,
@@ -40,28 +45,10 @@ impl TemperatureSample {
     pub fn cur(&self) -> f32 {
         self.cur
     }
-}
-
-pub struct Experiment {
-    sample: TemperatureSample,
-    stage: ExperimentStage,
-}
-
-impl Experiment {
-    pub fn new(start: f32, temp_range: TempRange) -> Self {
-        let sample = TemperatureSample {
-            cur: start,
-            temp_range,
-        };
-        Experiment {
-            sample,
-            stage: ExperimentStage::Configuration,
-        }
-    }
 
     pub fn iter_mut(&mut self, delta: f32, len: usize, random_range: f32) -> IterMut {
         IterMut {
-            experiment: self,
+            sample: self,
             iteration: 0,
             delta,
             len,
@@ -73,9 +60,9 @@ impl Experiment {
         let TempRange {
             lower_threshold,
             upper_threshold,
-        } = self.sample.temp_range;
+        } = self.temp_range;
         let final_temperature = lower_threshold + (upper_threshold - lower_threshold) / 2_f32;
-        let delta = (final_temperature - self.sample.cur) / (len as f32);
+        let delta = (final_temperature - self.cur) / (len as f32);
         self.iter_mut(delta, len, 0.0)
     }
 
@@ -83,21 +70,141 @@ impl Experiment {
         let TempRange {
             lower_threshold,
             upper_threshold,
-        } = self.sample.temp_range;
+        } = self.temp_range;
         self.iter_mut(0.0, len, upper_threshold - lower_threshold)
     }
+}
 
-    pub fn set_stage(&mut self, stage: ExperimentStage) {
-        self.stage = stage;
+pub struct ExperimentConfiguration {
+    pub experiment_id: String,
+    pub researcher: String,
+    pub sensors: Vec<String>,
+    pub sample_rate: u64,
+}
+
+pub struct Experiment {
+    sample: TemperatureSample,
+    stage: ExperimentStage,
+    config: ExperimentConfiguration,
+    producer: KafkaTopicProducer,
+}
+
+impl Experiment {
+    pub fn new(
+        start: f32,
+        temp_range: TempRange,
+        config: ExperimentConfiguration,
+        producer: KafkaTopicProducer,
+    ) -> Self {
+        let sample = TemperatureSample {
+            cur: start,
+            temp_range,
+        };
+        Experiment {
+            stage: ExperimentStage::Uninitialized,
+            sample,
+            producer,
+            config,
+        }
     }
 
-    pub fn stage(&self) -> ExperimentStage {
-        self.stage
+    async fn stage_configuration(&mut self) {
+        self.stage = ExperimentStage::Configuration;
+        let record = RecordData {
+            payload: events::experiment_configured_event(
+                &self.config.experiment_id,
+                &self.config.researcher,
+                &self.config.sensors,
+                25.5,
+                26.5,
+            ),
+            key: Some(&self.config.experiment_id),
+        };
+        let delivery_result = self.producer.send_event(record).await;
+        println!("Experiment Configured Event {:?}", delivery_result);
+    }
+
+    async fn stage_stabilization(&mut self) {
+        self.stage = ExperimentStage::Stabilization;
+        let record = RecordData {
+            payload: events::stabilization_started_event(&self.config.experiment_id),
+            key: Some(&self.config.experiment_id),
+        };
+        let delivery_result = self.producer.send_event(record).await;
+        println!("Stabilization Started Event {:?}", delivery_result);
+
+        // Stabilization Temperature Samples
+        let stabilization_samples = self.sample.stabilization_samples(2);
+        let stabilization_events = events::temperature_events(
+            stabilization_samples,
+            &self.config.experiment_id,
+            &self.config.researcher,
+            &self.config.sensors,
+            &self.stage,
+        );
+        for sensor_events in stabilization_events {
+            for event in sensor_events {
+                let record = RecordData {
+                    payload: event,
+                    key: Some(&self.config.experiment_id),
+                };
+                let delivery_result = self.producer.send_event(record).await;
+                println!("sensor measurement result {:?}", delivery_result);
+            }
+            println!("Temperature Measured Events");
+            time::sleep(Duration::from_millis(self.config.sample_rate)).await;
+        }
+    }
+
+    async fn stage_carry_out(&mut self) {
+        self.stage = ExperimentStage::CarryOut;
+        let record = RecordData {
+            payload: events::experiment_started_event(&self.config.experiment_id),
+            key: Some(&self.config.experiment_id),
+        };
+        let delivery_result = self.producer.send_event(record).await;
+        println!("Experiment Started Event {:?}", delivery_result);
+
+        let carry_out_samples = self.sample.carry_out_samples(20);
+        let carry_out_events = events::temperature_events(
+            carry_out_samples,
+            &self.config.experiment_id,
+            &self.config.researcher,
+            &self.config.sensors,
+            &self.stage,
+        );
+        for sensor_events in carry_out_events {
+            for event in sensor_events {
+                let record = RecordData {
+                    payload: event,
+                    key: Some(&self.config.experiment_id),
+                };
+                let delivery_result = self.producer.send_event(record).await;
+                println!("sensor measurement result {:?}", delivery_result);
+            }
+            println!("Temperature Measured Events\n\n");
+            time::sleep(Duration::from_millis(self.config.sample_rate)).await;
+        }
+
+        self.stage = ExperimentStage::Terminated;
+        let record = RecordData {
+            payload: events::experiment_terminated_event(&self.config.experiment_id),
+            key: Some(&self.config.experiment_id),
+        };
+        let delivery_result = self.producer.send_event(record).await;
+        println!("Experiment Terminated Event {:?}", delivery_result);
+    }
+
+    pub async fn run(&mut self) {
+        self.stage_configuration().await;
+        time::sleep(Duration::from_millis(2000)).await;
+        self.stage_stabilization().await;
+        self.stage_carry_out().await;
     }
 }
 
 pub struct IterMut<'a> {
-    pub experiment: &'a mut Experiment,
+    sample: &'a mut TemperatureSample,
     delta: f32,
     len: usize,
     iteration: usize,
@@ -111,16 +218,15 @@ impl<'a> Iterator for IterMut<'a> {
         if self.iteration >= self.len {
             return None;
         }
-        let sample = &mut self.experiment.sample;
 
-        sample.cur += self.delta;
+        self.sample.cur += self.delta;
         if self.random_range != 0.0 {
             let relative_val = rand::thread_rng().gen_range(-100.0..100.0);
             let absolute_val = relative_val * self.random_range / 100.0;
-            sample.cur += absolute_val;
+            self.sample.cur += absolute_val;
         }
         self.iteration += 1;
-        Some(*sample)
+        Some(*self.sample)
     }
 }
 

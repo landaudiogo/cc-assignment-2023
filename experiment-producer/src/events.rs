@@ -18,7 +18,7 @@ use crate::time;
 ///
 /// FutureRecord::payload requires a type that implements the trait `ToBytes` as an argument. This is our
 /// custom type to implement the trait.
-pub struct EventWrapper(pub Vec<u8>);
+pub struct EventWrapper(Vec<u8>);
 
 impl<'a> ToBytes for EventWrapper {
     fn to_bytes(&self) -> &[u8] {
@@ -178,9 +178,9 @@ pub fn temperature_events<'a>(
     experiment_id: &'a str,
     researcher: &'a str,
     sensors: &'a Vec<String>,
+    stage: &'a ExperimentStage,
 ) -> Box<dyn Iterator<Item = Vec<EventWrapper>> + 'a> {
     let mut prev_sample = None;
-    let stage = sample_iter.experiment.stage();
 
     Box::new(sample_iter.map(move |sample| {
         // let prev = prev_sample.unwrap();
