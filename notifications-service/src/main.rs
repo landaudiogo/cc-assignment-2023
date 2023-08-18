@@ -7,7 +7,6 @@ use poem_openapi::{
 };
 
 use clap::Parser;
-use generic_array::GenericArray;
 use serde::{Deserialize, Serialize};
 use tracing::{info, Level};
 

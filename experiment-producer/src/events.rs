@@ -1,5 +1,5 @@
 use apache_avro::types::{Record, Value};
-use apache_avro::{Schema, Writer};
+use apache_avro::{Schema, Writer, Reader};
 use rdkafka::{
     config::ClientConfig,
     error::KafkaError,
@@ -127,7 +127,13 @@ pub fn temperature_measured_event(
     record.put("timestamp", Value::Double(timestamp));
 
     writer.append(record).unwrap();
-    EventWrapper(writer.into_inner().unwrap())
+    let encoded = writer.into_inner().unwrap();
+
+    let reader = Reader::new(&encoded[..]).unwrap();
+    for value in reader {
+        println!("{:#?}", value);
+    }
+    EventWrapper(encoded)
 }
 
 fn compute_notification_type(
@@ -135,11 +141,10 @@ fn compute_notification_type(
     prev_sample: Option<TemperatureSample>,
     stage: &ExperimentStage,
 ) -> Option<NotificationType> {
-    println!("{:#?}", prev_sample);
-    println!("{:#?}", curr_sample);
     match (stage, prev_sample) {
         (ExperimentStage::Stabilization, Some(prev_sample)) => {
             if !curr_sample.is_out_of_range() && prev_sample.is_out_of_range() {
+                println!("=== Stabilized ===");
                 Some(NotificationType::Stabilized)
             } else {
                 None
@@ -147,7 +152,7 @@ fn compute_notification_type(
         }
         (ExperimentStage::CarryOut, Some(prev_sample)) => {
             if curr_sample.is_out_of_range() && !prev_sample.is_out_of_range() {
-                println!("=== Out of Range ===\n\n");
+                println!("=== Out of Range ===");
                 Some(NotificationType::OutOfRange)
             } else {
                 None
@@ -155,6 +160,7 @@ fn compute_notification_type(
         }
         (ExperimentStage::Stabilization, None) => {
             if !curr_sample.is_out_of_range() {
+                println!("=== Stabilized ===");
                 Some(NotificationType::Stabilized)
             } else {
                 None
@@ -162,6 +168,7 @@ fn compute_notification_type(
         }
         (ExperimentStage::CarryOut, None) => {
             if curr_sample.is_out_of_range() {
+                println!("=== Out of Range ===");
                 Some(NotificationType::OutOfRange)
             } else {
                 None
@@ -179,11 +186,11 @@ pub fn temperature_events<'a>(
     researcher: &'a str,
     sensors: &'a Vec<String>,
     stage: &'a ExperimentStage,
+    secret_key: &'a str,
 ) -> Box<dyn Iterator<Item = Vec<EventWrapper>> + 'a> {
     let mut prev_sample = None;
 
     Box::new(sample_iter.map(move |sample| {
-        // let prev = prev_sample.unwrap();
         let measurement_id = &format!("{}", Uuid::new_v4());
         let current_time = time::current_epoch();
 
@@ -194,8 +201,7 @@ pub fn temperature_events<'a>(
             measurement_id: measurement_id.into(),
             researcher: researcher.into(),
         };
-        println!("{:#?}", hash_data);
-        let measurement_hash = hash_data.encrypt("QJUHsPhnA0eiqHuJqsPgzhDozYO4f1zh".as_bytes());
+        let measurement_hash = hash_data.encrypt(secret_key.as_bytes());
         prev_sample = Some(sample);
 
         simulator::compute_sensor_temperatures(&sensors, sample.cur())

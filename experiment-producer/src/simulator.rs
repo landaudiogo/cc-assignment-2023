@@ -80,6 +80,7 @@ pub struct ExperimentConfiguration {
     pub researcher: String,
     pub sensors: Vec<String>,
     pub sample_rate: u64,
+    pub secret_key: String,
 }
 
 pub struct Experiment {
@@ -141,6 +142,7 @@ impl Experiment {
             &self.config.researcher,
             &self.config.sensors,
             &self.stage,
+            &self.config.secret_key,
         );
         for sensor_events in stabilization_events {
             for event in sensor_events {
@@ -172,6 +174,7 @@ impl Experiment {
             &self.config.researcher,
             &self.config.sensors,
             &self.stage,
+            &self.config.secret_key,
         );
         for sensor_events in carry_out_events {
             for event in sensor_events {
@@ -182,7 +185,7 @@ impl Experiment {
                 let delivery_result = self.producer.send_event(record).await;
                 println!("sensor measurement result {:?}", delivery_result);
             }
-            println!("Temperature Measured Events\n\n");
+            println!("Temperature Measured Events");
             time::sleep(Duration::from_millis(self.config.sample_rate)).await;
         }
 
