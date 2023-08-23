@@ -1,6 +1,7 @@
 use rand::Rng;
 use std::time::Duration;
 use tokio::time;
+use rdkafka::message::OwnedHeaders;
 
 use crate::events::{self, KafkaTopicProducer, RecordData};
 
@@ -120,6 +121,7 @@ impl Experiment {
                 26.5,
             ),
             key: Some(&self.config.experiment_id),
+            headers: OwnedHeaders::new().add("record_name", "experiment_configured")
         };
         let delivery_result = self.producer.send_event(record).await;
         println!("Experiment Configured Event {:?}", delivery_result);
@@ -130,6 +132,7 @@ impl Experiment {
         let record = RecordData {
             payload: events::stabilization_started_event(&self.config.experiment_id),
             key: Some(&self.config.experiment_id),
+            headers: OwnedHeaders::new().add("record_name", "stabilization_started")
         };
         let delivery_result = self.producer.send_event(record).await;
         println!("Stabilization Started Event {:?}", delivery_result);
@@ -149,6 +152,7 @@ impl Experiment {
                 let record = RecordData {
                     payload: event,
                     key: Some(&self.config.experiment_id),
+                    headers: OwnedHeaders::new().add("record_name", "sensor_temperature_measured")
                 };
                 let delivery_result = self.producer.send_event(record).await;
                 println!("sensor measurement result {:?}", delivery_result);
@@ -163,6 +167,7 @@ impl Experiment {
         let record = RecordData {
             payload: events::experiment_started_event(&self.config.experiment_id),
             key: Some(&self.config.experiment_id),
+            headers: OwnedHeaders::new().add("record_name", "experiment_started")
         };
         let delivery_result = self.producer.send_event(record).await;
         println!("Experiment Started Event {:?}", delivery_result);
@@ -181,6 +186,7 @@ impl Experiment {
                 let record = RecordData {
                     payload: event,
                     key: Some(&self.config.experiment_id),
+                    headers: OwnedHeaders::new().add("record_name", "sensor_temperature_measured")
                 };
                 let delivery_result = self.producer.send_event(record).await;
                 println!("sensor measurement result {:?}", delivery_result);
@@ -193,6 +199,7 @@ impl Experiment {
         let record = RecordData {
             payload: events::experiment_terminated_event(&self.config.experiment_id),
             key: Some(&self.config.experiment_id),
+            headers: OwnedHeaders::new().add("record_name", "experiment_terminated")
         };
         let delivery_result = self.producer.send_event(record).await;
         println!("Experiment Terminated Event {:?}", delivery_result);

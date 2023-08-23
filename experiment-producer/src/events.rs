@@ -3,7 +3,7 @@ use apache_avro::{Schema, Writer, Reader};
 use rdkafka::{
     config::ClientConfig,
     error::KafkaError,
-    message::{OwnedMessage, ToBytes},
+    message::{OwnedMessage, ToBytes, OwnedHeaders},
     producer::{FutureProducer, FutureRecord},
 };
 use std::{fs, time::Duration};
@@ -223,6 +223,7 @@ pub fn temperature_events<'a>(
 pub struct RecordData<K: ToBytes, T: ToBytes> {
     pub payload: T,
     pub key: Option<K>,
+    pub headers: OwnedHeaders,
 }
 
 pub struct KafkaTopicProducer {
@@ -235,6 +236,10 @@ impl KafkaTopicProducer {
         let producer: FutureProducer = ClientConfig::new()
             .set("bootstrap.servers", brokers)
             .set("message.timeout.ms", "5000")
+            .set("security.protocol", "SSL")
+            .set("ssl.ca.location", "experiment-producer/auth/ca.crt")
+            .set("ssl.keystore.location", "experiment-producer/auth/kafka.keystore.pkcs12")
+            .set("ssl.keystore.password", "cc2023")
             .create()
             .expect("Producer creation error");
         KafkaTopicProducer {
@@ -252,7 +257,7 @@ impl KafkaTopicProducer {
         K: ToBytes,
     {
         let mut future_record: FutureRecord<'_, K, T> =
-            FutureRecord::to(&self.topic).payload(&record.payload);
+            FutureRecord::to(&self.topic).payload(&record.payload).headers(record.headers);
         if let Some(key) = future_record.key {
             future_record = future_record.key(&key);
         }
