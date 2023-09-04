@@ -40,7 +40,7 @@ struct NotifyBody {
 enum NotifyResponse {
     /// Notification is successfully created
     #[oai(status = 200)]
-    Ok,
+    Ok(PlainText<String>),
 }
 
 #[derive(ApiResponse)]
@@ -106,7 +106,6 @@ impl Api {
             ))));
         }
 
-        // TODO remove unwrap, this can be null
         if let None = hash_data.notification_type {
             return Err(NotifyErrorResponse::BadRequest(PlainText(format!(
                 "Unexpected notification. Measurement `{}` should not have been notified",
@@ -130,13 +129,16 @@ impl Api {
             .expect("Time went backwards");
         let current_time: f64 =
             current_time.as_secs() as f64 + current_time.subsec_nanos() as f64 / 1_000_000_000_f64;
+
         info!(
             "measurement_id: {}\tlatency: {}s",
             body.measurement_id,
             (current_time - hash_data.timestamp)
         );
 
-        Ok(NotifyResponse::Ok)
+        Ok(NotifyResponse::Ok(PlainText(format!(
+            "{}", current_time - hash_data.timestamp
+        ))))
     }
 }
 
@@ -184,7 +186,7 @@ mod test {
             "researcher": "d.landau@uu.nl",
             "experiment_id": "5678",
             "measurement_id": "1234",
-            "timestamp": 1692029115.4314,
+            "timestamp": 1693833763.2243981,
         })
         .to_json_string()
     }
@@ -234,8 +236,7 @@ mod test {
             "experiment_id": "5678",
             "cipher_data": cipher_data
         });
-        let mut res = client.post("/api/notify").body_json(&body).send().await;
-        assert_eq!(res.0.take_body().into_string().await.unwrap(), "");
+        let res = client.post("/api/notify").body_json(&body).send().await;
         assert_eq!(res.0.status(), 200);
     }
 
@@ -323,17 +324,20 @@ mod test {
     async fn post_notify_incompatible_measurement_id() {
         let message = message_for_comparison();
         let client = get_client();
+        let json_content = json!({
+            "notification_type": "OutOfRange",
+            "researcher": "d.landau@uu.nl",
+            "measurement_id": "234",
+            "experiment_id": "5678",
+            "cipher_data": create_cipher_data(message)
+        });
+        println!("{:?}", json_content);
         let mut res = client
             .post("/api/notify")
-            .body_json(&json!({
-                "notification_type": "OutOfRange",
-                "researcher": "d.landau@uu.nl",
-                "measurement_id": "234",
-                "experiment_id": "5678",
-                "cipher_data": create_cipher_data(message)
-            }))
+            .body_json(&json_content)
             .send()
             .await;
+
         assert_eq!(res.0.status(), 400);
         assert_eq!(
             res.0.take_body().into_string().await.unwrap(),

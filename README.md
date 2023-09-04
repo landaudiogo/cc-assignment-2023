@@ -405,10 +405,16 @@ Notifies a researcher of a temperature stabilized or an out-of-range temperature
 POST `/notify`
 
 Body Parameters: 
-- `notification-type`: An enum which indicates the type of notification to be sent to the researcher (stabilized/out-of-range).
+- `notification_type`: An enum which indicates the type of notification to be
+  sent to the researcher (Stabilized/OutOfRange).
 - `researcher`: The researcher's email to be notified. 
-- `experiment-id`: The experiment's ID to which the measurement belongs to.
-- `measurement-id`: The temperature measurement that concerns this notification.
+- `experiment_id`: The experiment's ID to which the measurement belongs.
+- `measurement_id`: The temperature measurement that concerns this
+  notification.
+- `cipher_data`: This value represents the `measurement_hash` value in a
+  measurement’s event payload. Through the data contained in this value, the
+  notifications service determines whether it was correctly notified of a
+  stabilized or out-of-range event.
 
 **Body Schema**: 
 ```json
@@ -416,26 +422,45 @@ Body Parameters:
     "title": "notify-body",
     "type": "object", 
     "properties": {
-    	"notification-type": {"type": "string", "enum": ["out-of-range", "stabilized"]},
+    	"notification_type": {"type": "string", "enum": ["OutOfRange", "Stabilized"]},
         "researcher": {"type": "string"},
-        "experiment-id": {"type": "string"},
-        "measurement-id": {"type": "string"}
+        "experiment_id": {"type": "string"},
+        "measurement_id": {"type": "string"},
+        "cipher_data": {"type": "string"}
     }
 }
 ```
 
 **Example Request**:
 ```bash
-curl -X POST http://<notification-service>/notify \
-    -d '{
-		"notification-type": "stabilized", 
-	    "researcher": "d.landau@uu.nl",
-	    "experiment-id": "9ee55bd4-a531-409c-9a64-0398353cadc5",
-	    "measurement-id": "fb5b8af2-9309-46c8-bcbe-87c98b407c3d"
-	}'
+curl -X 'POST' \
+  'http://localhost:3000/api/notify' \
+  -H 'accept: */*' \
+  -H 'Content-Type: application/json; charset=utf-8' \
+  -d '{
+       "notification_type": "OutOfRange", 
+       "researcher": "d.landau@uu.nl",
+       "measurement_id": "1234", 
+       "experiment_id": "5678", 
+       "cipher_data": "D5qnEHeIrTYmLwYX.hSZNb3xxQ9MtGhRP7E52yv2seWo4tUxYe28ATJVHUi0J++SFyfq5LQc0sTmiS4ILiM0/YsPHgp5fQKuRuuHLSyLA1WR9YIRS6nYrokZ68u4OLC4j26JW/QpiGmAydGKPIvV2ImD8t1NOUrejbnp/cmbMDUKO1hbXGPfD7oTvvk6JQVBAxSPVB96jDv7C4sGTmuEDZPoIpojcTBFP2xA"
+}'
 ```
 ##### Response 
 HTTP status code: 200
+
+Payload: 
+```json
+1470.385802745819
+```
+
+Payload Schema:
+```json
+{
+    "title": "notify-response-body",
+    "type": "number", 
+}
+```
+
 # Development Setup
 
 Your team will have access to a single VM on the cloud where you will be deploying your services. 
