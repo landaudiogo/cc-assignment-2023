@@ -24,8 +24,6 @@ Related to these experiments, this company has hired your team to develop a `Tem
 
 The research centre has many physical spaces available for the temperature-controlled experiments. These spaces can be of any size, and therefore the researcher has to set the environment so as to have the right amount of sensors for the physical space required for the experiment. This also means that for each experiment, there might be an arbitrary number of sensors monitoring the temperature. The physical space's temperature in these conditions is defined as the average temperature of all sensors allocated to an experiment.
 
-Depending on the granularity of an experiment's temperature control, each experiment has its own sampling rate, e.g. one experiment might have a sampling rate of 1 measurement per second, and another has a sampling rate of 1 every 0.1 seconds.
-
 It is fundamental that the physical space where the experiment is to be carried out has reached its desired temperature. The desired range is specific to each experiment and defined by the researcher while configuring the experiment. 
 
 Lastly, the experiment is carried out for as long as the researcher desires. However whenever the temperature for an experiment falls out of range, the researcher has to be notified.
@@ -59,43 +57,86 @@ The following figure provides an overview of the system:
 
 ![System Overview](https://github.com/landaudiogo/cc-assignment-2023/assets/26680755/8792e516-fc37-41a8-bb14-61bf20121be0)
 
-The service your team will have to implement, is the one highlighted in yellow. There are 2 main interfaces your microservice has to provide which are highlighted as annotations 1 and 2:
-- Interface 1 - Kafka consumer that reads data from a Kafka topic where the data regarding an experiment's procedure is produced. The information is produced to the `<team_id>` topic, where `<team_id>` is an identifier unique to each team.
-- Interface 2 - Temperature Observability REST API your service will have to provide for researchers to consult the internal state of their experiments. The main queries will be: the temperature values for a specified time-interval; The time instants throughout an experiment wherein the temperature fell outside of the range specified in the experiment's configuration.
-- Interface 3 - Notifications REST API provided by the notification service which is **already implemented**. Your service will only have to interact with it to communicate any event to a researcher.
+The service your team will have to implement, is the one highlighted in yellow. Your service will
+have to either provide or interact with the following interfaces:
+- Interface 1 - Your service will have to implement a Kafka consumer that reads data from
+a Kafka topic where the data regarding an experiment's procedure is produced. The
+information is produced to the `<team_id>` topic, where `<team_id>` is an identifier
+unique to each team.
+- Interface 2 - Your service will have to provide a Temperature Observability REST API for
+researchers to consult the historic temperature value for their experiments. The main
+queries will be the temperature values for a specified time interval and the time instants
+throughout an experiment wherein the temperature fell outside of the range specified in
+the experiment's configuration.
+- Interface 3 - Your service will have to interact with the Notifications REST API. This is
+the service that has to be notified to communicate any event to a researcher.
 
-![Line Chart Events drawio](https://github.com/landaudiogo/cc-assignment-2023/assets/26680755/904794dc-b6af-44af-ac9c-f33d78cc1e8f)
-
-A service's interface is what exposes its functionalities to users or services that can communicate with it. Your team's assignment consists of designing and implementing a system that complies with the functional and the non-functional requirements while exposing the aforementioned interfaces. Additionally, as long as your services are running as containers, your team has the liberty to choose any service, or any programming language to develop the Temperature Observability Microservice.
+A service's interface is what exposes its functionalities to users or services that can
+communicate with it. Your team's assignment consists of designing and implementing a system
+that complies with the functional and non-functional requirements while exposing the
+aforementioned interfaces. Additionally, as long as your services are running as containers,
+your team has the liberty to choose any service, or any programming language to develop the
+Temperature Observability Microservice.
 
 ## Interfaces
 
-To illustrate the different events throughout an experiment, we will use an example wherein an experiment requires the temperature to be between 25-26 °C. The following diagram contains a representation of the event's lifecycle.
+To illustrate the different events throughout an experiment, we will use an example wherein an
+experiment requires the temperature to be between 25-26 °C. The following diagram contains a
+representation of the event's lifecycle:
 
+![Line Chart Events drawio](https://github.com/landaudiogo/cc-assignment-2023/assets/26680755/904794dc-b6af-44af-ac9c-f33d78cc1e8f)
 
+Annotation 1 marks the moment an “Experiment Configuration Event” was published. This event
+is communicated by the researcher to indicate: the temperature sensors that are to be used
+during the experiment; An experiment's temperature range; Other tracking information.
 
-Annotation `1` marks the moment an `Experiment Configuration` event was published. This event is communicated by the researcher to indicate which temperature sensors are to be used during the experiment, and an experiment's temperature range.
+Annotation 2 marks the moment “Stabilization Started Event” was published. This event is
+communicated by the researcher to indicate when the temperature controller is controlling the
+physical space's temperature to be within the desired range. Starting from annotation `2-6`,
+temperature measurements are sent to the `<team_id>` topic.
 
-Annotation `2` marks the moment `Stabilization Started` event was published. This event is communicated by the researcher to indicate when the temperature controller is controlling the physical space's temperature to be within the desired range. Starting from annotation `2-6`, temperature measurements are sent to the `<team_id>` topic.
+Annotation 3 marks the moment the temperature in the experiment's physical space has
+reached the desired range specified in the experiment configuration event. **Your microservice
+has to notify the researcher of this event.**
 
-Annotation `3` marks the moment the temperature in the experiment's physical space has reached the desired range specified in the experiment configuration event.
+Annotation 4 marks the moment the “Experiment Started Event” was published. This event
+indicates the moment the researcher has started the experiment. From this moment onward,
+your microservice has to be aware of when the experiment's temperature falls out-of-range to
+notify the main researcher.
 
-Annotation `4` marks the moment the `Experiment Started` event was published. This event indicates the moment the researcher has started the experiment. From this moment onward, your microservice has to be aware of when the experiment's temperature falls out-of-range to notify the main researcher.
+Annotation 5 marks the moment the experiment's temperature falls out-of-range, which requires
+notifying the researcher through the notifications service. The remaining measurements which
+are out-of-range until the temperature stabilizes again do not have to be notified, only the
+measurement taken at Annotation 5.
 
-Annotation `5` marks the moment the experiment's temperature falls out-of-range, which requires notifying the researcher through the notifications service. **The remaining measurements that are out-of-range until the temperature stabilizes again do not have to be notified, only the measurement taken at Annotation `5`.**
-
-Annotation `6` marks the moment the `Experiment Terminated` event is published indicating the end of the experiment. From this moment onward, no more measurement or data referring to that experiment is sent to the  `<team_id>` topic, but queries related to the experiment's temperature values can be performed via the Temperature Observability REST API.
+Annotation 6 marks the moment the Experiment Terminated Event is published indicating the
+end of the experiment. From this moment onward, no more measurement or data referring to
+that experiment is sent to the `<team_id>` topic, but queries related to the experiment's
+temperature values can be performed via the Temperature Observability REST API.
 
 ### Topic Events
 
-The XYZ research centre manages a kafka cluster that contains a topic with the name `<team_id>` that contains data related to the state of an experiment. In Kafka’s context, a topic is where events are published to and consumed from by data producers and consumers respectively. As such, this is also the data your microservice will have to consume to track each experiments' state.
+The XYZ research centre manages a kafka cluster with a topic named `<team_id>` that contains
+data related to the state of an experiment. In Kafka’s context, a topic is where events are
+published to and consumed from (by data producers and consumers respectively). As such, this
+is also the data your microservice will have to consume to track each experiment’s state.
 
-Each event published into the `<team_id>` topic is serialized using the avro format schema. The following sections will describe each event and provide an example payload and schema for each event.
+Each event published into the `<team_id>` topic is serialized using the avro format schema. The
+following sections will describe each event and provide an example payload and schema for
+each event. Also, each event published into the topic has a header `record_name` which
+indicates the type of the message.
+
 #### Experiment Configuration Event
 
-This event configures an experiment and involves specifying: Sensors that will track the temperature of the physical space; The allowed temperature range for the experiment; and the researcher's email address for notifications
+This event configures an experiment and involves specifying: Sensors that will track the
+temperature of the physical space; The allowed temperature range for the experiment; and the
+researcher's email address for notifications.
 
-As such, if the main researcher for experiment `9ee55bd4-a531-409c-9a64-0398353cadc5` has the email `d.landau@uu.nl`, and the physical environment has been setup to contain the sensors with ids `["66cc5dc0-d75a-40ee-88d5-0308017191af", "ac5e0ea2-a04d-4eb3-a6e3-206d47ffe9e1"]`, and the maximum allowed temperature is `26` and the minimum temperature is `25`, then the configuration event would look like:
+As such, if the main researcher for experiment an experiment with id `9ee55bd4-a531-409c-
+9a64-0398353cadc5` has the email `d.landau@uu.nl`, and the physical environment has been
+setup to contain the sensors with ids `["66cc5dc0-d75a-40ee-88d5-0308017191af", "ac5e0ea2-
+a04d-4eb3-a6e3-206d47ffe9e1"]`, and the maximum allowed temperature is `26` and the
+minimum temperature is `25`, then the configuration event would look like:
 
 ```json
 {
@@ -112,9 +153,9 @@ As such, if the main researcher for experiment `9ee55bd4-a531-409c-9a64-0398353c
 }
 ```
 
-The researcher field contains the email of the researcher that has to be notified by the notifications service.
+The researcher field contains the email of the researcher who has to be notified by the notifications service.
 
-Schema: 
+Event avro schema: 
 ```json
 {
     "type": "record", 
@@ -152,9 +193,14 @@ Schema:
 
 #### Stabilization Started Event
 
-This event signals the time at which the experiment's physical space's temperature started being controlled. After this event has been published to the topic, `Sensor Temperature Measured` Event events will follow. For this reason, it is also the moment your microservice has to start monitoring the temperature values for an experiment. 
+This event signals the time at which the experiment's physical space's temperature started
+being controlled. After this event has been published to the topic, “Sensor Temperature
+Measured” events will follow. For this reason, it is also the moment your microservice has to
+start monitoring the experiment’s temperature values.
 
-**The temperature values throughout the stabilization phase do not have to be stored for historic querying**. However, because the researcher has to be notified when the temperature has reached the range indicated in the configuration event, the temperature has to be monitored by your microservice.
+**The temperature values throughout the stabilization phase do not have to be stored for historic querying**. However, the experiment’s temperature must be monitored since the
+researcher has to be notified when the temperature has reached the range indicated in the
+configuration event.
 
 An example payload for this event:
 ```json
@@ -164,7 +210,7 @@ An example payload for this event:
 }
 ```
 
-Schema:
+Event avro schema:
 ```json
 {
     "type": "record", 
@@ -181,6 +227,7 @@ Schema:
     ]
 }
 ```
+
 #### Experiment Started Event
 
 This event marks the time at which the researcher has started the experiment. `Sensor Temperature Measured` events consumed after this moment have to be stored for further consultation by a researcher via the Temperature Observability REST API. 
@@ -238,7 +285,15 @@ the temperature measured in the experiment's physical space is $(25.3 + 25.5)/2 
 
 As shown in the previous 2 measurements, both have the same `measurement-id` field. This is important when communicating to the notification service the ID of the measurement being notified. This field is used by the Notification Service to calculate your service's notification latency.
 
-Schema: 
+**Important Note**:
+In the example above, the `measurement_hash` field is also the same for both measurements.
+If your service considers that the average temperature falls out of range and has to notify the
+notifications service, one of the fields in the post request to the notifications REST API is the
+`cipher_data`. This field in the post request has to be filled out with the value shown in the
+`measurement_hash`. Based on this hash value, the notifications service will inform your
+service whether you correctly notified a given measurement or not.
+
+Event avro schema: 
 ```json
 {
     "type": "record", 
@@ -283,7 +338,7 @@ Example event:
 }
 ```
 
-Schema: 
+Event avro schema: 
 ```json
 {
     "type": "record", 
@@ -302,9 +357,14 @@ Schema:
 ```
 
 ### Temperature Observability REST API
+
+This is the REST API your service should expose for a researcher to consult the historic
+temperature values for an experiment.
+
 #### Experiment Out-of-Range Endpoint
-##### Description
+
 Given an experiment as input, this endpoint should return the list of measurements during which an experiment was out of the temperature range specified in the experiment configuration event.
+
 ##### Request 
 GET `/temperature/out-of-range`
 
@@ -320,6 +380,11 @@ curl -X GET http://<your-service>/temperature/out-of-range -G \
 HTTP status code: 200
 
 **Example Response**: 
+
+HTTP status code: 
+200
+
+Payload:
 ```json
 [
   {"timestamp": 1691419390.9467194, "temperature": 25.4},
@@ -330,7 +395,7 @@ HTTP status code: 200
 ]
 ```
 
-JSON Schema: 
+Payload JSON Schema: 
 ```json
 {
   "title": "out-of-range",
@@ -345,9 +410,11 @@ JSON Schema:
   }
 }
 ```
+
 #### Experiment Temperature Endpoint
-##### Description
+
 Given an experiment, a start-time and an end-time, this endpoint should return the temperature measurements for the specified time-interval.
+
 ##### Request
 
 GET `/temperature`
@@ -355,7 +422,7 @@ GET `/temperature`
 **Query parameters**:
 - `experiment-id` (`string`): The ID of the experiment.
 - `start-time` (`double`): epoch timestamp for the interval's start time.
-- `end-time` (`double`): : epoch timestamp for the interval's end time.
+- `end-time` (`double`): epoch timestamp for the interval's end time.
 
 **Example Request**:
 ```bash
@@ -367,7 +434,7 @@ curl -X GET http://<your-service>/temperature/out-of-range -G \
 ##### Response 
 HTTP status code: 200
 
-**Example Response**. 
+Payload: 
 ```json
 [
   {"timestamp": 1691419390.9467194, "temperature": 25.4},
@@ -378,7 +445,7 @@ HTTP status code: 200
 ]
 ```
 
-JSON Schema: 
+Response payload JSON schema: 
 ```json
 {
   "title": "temperature",
@@ -397,9 +464,11 @@ JSON Schema:
 ### Notifications API
 
 This is the service you will have to notify when communicating certain events related to an experiment. You will not have to implement this interface, but you will have to interact with it, and as such, this section describes the notification service REST API interface.
+
 #### Notify Endpoint
-##### Description
+
 Notifies a researcher of a temperature stabilized or an out-of-range temperature measurement event.
+
 ##### Request
 
 POST `/notify`
@@ -445,6 +514,7 @@ curl -X 'POST' \
        "cipher_data": "D5qnEHeIrTYmLwYX.hSZNb3xxQ9MtGhRP7E52yv2seWo4tUxYe28ATJVHUi0J++SFyfq5LQc0sTmiS4ILiM0/YsPHgp5fQKuRuuHLSyLA1WR9YIRS6nYrokZ68u4OLC4j26JW/QpiGmAydGKPIvV2ImD8t1NOUrejbnp/cmbMDUKO1hbXGPfD7oTvvk6JQVBAxSPVB96jDv7C4sGTmuEDZPoIpojcTBFP2xA"
 }'
 ```
+
 ##### Response 
 HTTP status code: 200
 
@@ -470,30 +540,35 @@ We will provide you with the other external services so you can test how your sy
 - A load generator for your kafka topic that publishes the streams of events for an experiment.
 - A notification service for your microservice to notify a researcher.
 
+You may find these external services in [this repository](https://github.com/landaudiogo/cc-assignment-2023).
+
 # Evaluation
 
 The assignment evaluation will consist of 3 components:
 - Demo 
 - Architecture Assessment
 - Report
+
 ## Demo
 
 Your implementation will be put to test during a Demo Session to be scheduled at the end of the period.
 
 The demo will be split into 3 different parts:
 - Verification of data consistency (endpoint integration testing): Load will be generated for your microservice to consume, followed by querying the rest endpoints provided by your service to evaluate the consistency of the data presented by your team's microservice.
-- Stress test the architecture endpoint + event entrypoints' scalability (implementation scalability): Evaluates how your architecture performs under varying load intensities generated by our workloads. The workload patterns will not be shared beforehand, and therefore, the architecture is expected to be flexible to different workload intensities. We will evaluate your microservice's performance based on:
+- Stress test the architecture scalability (implementation scalability): Evaluate how your architecture performs under varying load intensities generated by our workloads. The workload patterns will not be shared beforehand, and therefore, the architecture is expected to be flexible to different workload intensities. We will evaluate your microservice's performance based on:
 	1. Endpoint response time
 	2. Notification latency
-	3. Total architecture cost throughout the stress test
+	3. Total architecture cost throughout the stress test. This will be a metric computed based on the average CPU and Memory used by your implementation
 
 Bonus:
 - If your implementation can maintain a notification latency < 10s throughout the whole stress test.
-## Architecture
+
+## Architecture Assessment
 
 To evaluate the architecture, during the demo session there will be a short discussion to understand the main design decisions taken by your team, followed by a qualitative assessment of the arcthitecture included in the report based on the principles of:
-- Seperation of Concerns
-- Scalability
+- Seperation of Concerns: Evaluates the modularity of your architecture, and whether each service has distinct responsibilities, or if it has too many responsibilities.
+- Scalability: Analysis of your microservice’s theoretical scale.
+
 ## Report
 
 10 page maximum report.
@@ -502,6 +577,7 @@ Sections:
 - Considerations and Trade-offs: The different solutions you considered to the problems you presented and their respective trade-offs.
 - Implementation Architecture: A description of the final architecture implemented for the assignment.
 - Future Work: What further improvements could be made to your architecture if your team had more time to dedicate to the project.
+- Learning Outcomes: Each team member should write a short paragraph. The paragraph should indicate what you feel were the most valuable learning outcomes through this assignment
 
 # Contact
 
