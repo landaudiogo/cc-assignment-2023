@@ -34,7 +34,7 @@ pub fn experiment_configured_event(
     lower_threshold: f32,
 ) -> EventWrapper {
     let raw_schema =
-        fs::read_to_string("experiment-producer/schemas/experiment_configured.avro").unwrap();
+        fs::read_to_string("experiment-producer/schemas/experiment_configured.avsc").unwrap();
     let schema = Schema::parse_str(&raw_schema).unwrap();
     let mut writer = Writer::new(&schema, Vec::new());
 
@@ -59,7 +59,7 @@ pub fn experiment_configured_event(
 
 pub fn stabilization_started_event(experiment_id: &str) -> EventWrapper {
     let raw_schema =
-        fs::read_to_string("experiment-producer/schemas/stabilization_started.avro").unwrap();
+        fs::read_to_string("experiment-producer/schemas/stabilization_started.avsc").unwrap();
     let schema = Schema::parse_str(&raw_schema).unwrap();
     let mut writer = Writer::new(&schema, Vec::new());
 
@@ -75,7 +75,7 @@ pub fn stabilization_started_event(experiment_id: &str) -> EventWrapper {
 
 pub fn experiment_started_event(experiment_id: &str) -> EventWrapper {
     let raw_schema =
-        fs::read_to_string("experiment-producer/schemas/experiment_started.avro").unwrap();
+        fs::read_to_string("experiment-producer/schemas/experiment_started.avsc").unwrap();
     let schema = Schema::parse_str(&raw_schema).unwrap();
     let mut writer = Writer::new(&schema, Vec::new());
 
@@ -91,7 +91,7 @@ pub fn experiment_started_event(experiment_id: &str) -> EventWrapper {
 
 pub fn experiment_terminated_event(experiment_id: &str) -> EventWrapper {
     let raw_schema =
-        fs::read_to_string("experiment-producer/schemas/experiment_terminated.avro").unwrap();
+        fs::read_to_string("experiment-producer/schemas/experiment_terminated.avsc").unwrap();
     let schema = Schema::parse_str(&raw_schema).unwrap();
     let mut writer = Writer::new(&schema, Vec::new());
 
@@ -114,7 +114,7 @@ pub fn temperature_measured_event(
     measurement_hash: &str,
 ) -> EventWrapper {
     let raw_schema =
-        fs::read_to_string("experiment-producer/schemas/sensor_temperature_measured.avro").unwrap();
+        fs::read_to_string("experiment-producer/schemas/sensor_temperature_measured.avsc").unwrap();
     let schema = Schema::parse_str(&raw_schema).unwrap();
     let mut writer = Writer::new(&schema, Vec::new());
 
