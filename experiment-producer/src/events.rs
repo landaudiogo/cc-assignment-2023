@@ -7,6 +7,7 @@ use rdkafka::{
     producer::{FutureProducer, FutureRecord},
 };
 use std::{fs, time::Duration};
+use std::fmt::Debug;
 use uuid::Uuid;
 
 use event_hash::{HashData, NotificationType};
@@ -258,8 +259,8 @@ impl KafkaTopicProducer {
     {
         let mut future_record: FutureRecord<'_, K, T> =
             FutureRecord::to(&self.topic).payload(&record.payload).headers(record.headers);
-        if let Some(key) = future_record.key {
-            future_record = future_record.key(&key);
+        if record.key.is_some() {
+            future_record = future_record.key(record.key.as_ref().unwrap());
         }
 
         self.producer
