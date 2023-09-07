@@ -576,6 +576,7 @@ Sections:
 - Problem Description: A description of the main problems your team focused on solving when coming up with a possible architecture.
 - Considerations and Trade-offs: The different solutions you considered to the problems you presented and their respective trade-offs.
 - Implementation Architecture: A description of the final architecture implemented for the assignment.
+- Results: Plots showing how your system performed throughout your own benchmarks, and during the demo.
 - Future Work: What further improvements could be made to your architecture if your team had more time to dedicate to the project.
 - Learning Outcomes: Each team member should write a short paragraph. The paragraph should indicate what you feel were the most valuable learning outcomes through this assignment
 
