@@ -3,7 +3,7 @@
 Example execution:
 ```bash
 cargo run -p experiment-producer -- \
-    --brokers 13.50.5.220:19093,13.50.5.220:29093,13.50.5.220:39093 \
+    --brokers 13.49.128.80:19093,13.49.128.80:29093,13.49.128.80:39093 \
     --topic group15
 ```
 
