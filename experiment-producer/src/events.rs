@@ -7,7 +7,6 @@ use rdkafka::{
     producer::{FutureProducer, FutureRecord},
 };
 use std::{fs, time::Duration};
-use std::fmt::Debug;
 use uuid::Uuid;
 
 use event_hash::{HashData, NotificationType};
@@ -131,8 +130,8 @@ pub fn temperature_measured_event(
     let encoded = writer.into_inner().unwrap();
 
     let reader = Reader::new(&encoded[..]).unwrap();
-    for value in reader {
-        println!("{:#?}", value);
+    for _value in reader {
+        // println!("{:#?}", value);
     }
     EventWrapper(encoded)
 }

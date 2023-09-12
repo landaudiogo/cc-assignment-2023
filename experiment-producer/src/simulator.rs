@@ -81,6 +81,8 @@ pub struct ExperimentConfiguration {
     pub researcher: String,
     pub sensors: Vec<String>,
     pub sample_rate: u64,
+    pub stabilization_samples: u16,
+    pub carry_out_samples: u16,
     pub secret_key: String,
 }
 
@@ -138,7 +140,7 @@ impl Experiment {
         println!("Stabilization Started Event {:?}", delivery_result);
 
         // Stabilization Temperature Samples
-        let stabilization_samples = self.sample.stabilization_samples(2);
+        let stabilization_samples = self.sample.stabilization_samples(self.config.stabilization_samples.into());
         let stabilization_events = events::temperature_events(
             stabilization_samples,
             &self.config.experiment_id,
@@ -172,7 +174,7 @@ impl Experiment {
         let delivery_result = self.producer.send_event(record).await;
         println!("Experiment Started Event {:?}", delivery_result);
 
-        let carry_out_samples = self.sample.carry_out_samples(20);
+        let carry_out_samples = self.sample.carry_out_samples(self.config.carry_out_samples.into());
         let carry_out_events = events::temperature_events(
             carry_out_samples,
             &self.config.experiment_id,
@@ -206,9 +208,12 @@ impl Experiment {
     }
 
     pub async fn run(&mut self) {
+        println!("=== Stage Configuration ===");
         self.stage_configuration().await;
         time::sleep(Duration::from_millis(2000)).await;
+        println!("=== Stage Stabilization ===");
         self.stage_stabilization().await;
+        println!("=== Stage CarryOut ===");
         self.stage_carry_out().await;
     }
 }

@@ -47,6 +47,20 @@ async fn main() {
             .action(ArgAction::Set)
             .value_parser(value_parser!(u64))
         )
+        .arg(Arg::new("stabilization-samples")
+            .required(false)
+            .long("stabilization-samples")
+            .default_value("2")
+            .action(ArgAction::Set)
+            .value_parser(value_parser!(u16))
+        )
+        .arg(Arg::new("carry-out-samples")
+            .required(false)
+            .long("carry-out-samples")
+            .default_value("20")
+            .action(ArgAction::Set)
+            .value_parser(value_parser!(u16))
+        )
         .arg(Arg::new("start-temperature")
             .required(false)
             .long("start-temperature")
@@ -83,6 +97,8 @@ async fn main() {
         sensors: (0..num_sensors).map(|_| format!("{}", Uuid::new_v4())).collect(),
         sample_rate: matches.remove_one::<u64>("sample-rate").expect("required"),
         secret_key: matches.remove_one::<String>("secret-key").expect("required").clone(),
+        stabilization_samples: matches.remove_one::<u16>("stabilization-samples").expect("required"),
+        carry_out_samples: matches.remove_one::<u16>("carry-out-samples").expect("required"),
     };
 
     let mut experiment = Experiment::new(
