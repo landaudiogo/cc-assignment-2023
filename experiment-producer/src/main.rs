@@ -97,16 +97,16 @@ async fn main() {
         sensors: (0..num_sensors).map(|_| format!("{}", Uuid::new_v4())).collect(),
         sample_rate: matches.remove_one::<u64>("sample-rate").expect("required"),
         secret_key: matches.remove_one::<String>("secret-key").expect("required").clone(),
+        temp_range: TempRange::new(
+            matches.remove_one::<f32>("lower-threshold").expect("required"), 
+            matches.remove_one::<f32>("upper-threshold").expect("required"), 
+        ).unwrap(),
         stabilization_samples: matches.remove_one::<u16>("stabilization-samples").expect("required"),
         carry_out_samples: matches.remove_one::<u16>("carry-out-samples").expect("required"),
     };
 
     let mut experiment = Experiment::new(
         matches.remove_one::<f32>("start-temperature").expect("required"), 
-        TempRange::new(
-            matches.remove_one::<f32>("lower-threshold").expect("required"), 
-            matches.remove_one::<f32>("upper-threshold").expect("required"), 
-        ).unwrap(),
         experiment_config,
         topic_producer,
     );

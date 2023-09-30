@@ -16,8 +16,8 @@ pub enum ExperimentStage {
 
 #[derive(Clone, Copy, Debug)]
 pub struct TempRange {
-    lower_threshold: f32,
-    upper_threshold: f32,
+    pub lower_threshold: f32,
+    pub upper_threshold: f32,
 }
 
 impl TempRange {
@@ -81,6 +81,7 @@ pub struct ExperimentConfiguration {
     pub researcher: String,
     pub sensors: Vec<String>,
     pub sample_rate: u64,
+    pub temp_range: TempRange,
     pub stabilization_samples: u16,
     pub carry_out_samples: u16,
     pub secret_key: String,
@@ -96,13 +97,12 @@ pub struct Experiment {
 impl Experiment {
     pub fn new(
         start: f32,
-        temp_range: TempRange,
         config: ExperimentConfiguration,
         producer: KafkaTopicProducer,
     ) -> Self {
         let sample = TemperatureSample {
             cur: start,
-            temp_range,
+            temp_range: config.temp_range,
         };
         Experiment {
             stage: ExperimentStage::Uninitialized,
@@ -119,8 +119,7 @@ impl Experiment {
                 &self.config.experiment_id,
                 &self.config.researcher,
                 &self.config.sensors,
-                25.5,
-                26.5,
+                self.config.temp_range,
             ),
             key: Some(&self.config.experiment_id),
             headers: OwnedHeaders::new().add("record_name", "experiment_configured")

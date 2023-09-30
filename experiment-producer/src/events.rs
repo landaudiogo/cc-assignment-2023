@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use event_hash::{HashData, NotificationType};
 
-use crate::simulator::{self, ExperimentStage, IterMut, TemperatureSample};
+use crate::simulator::{self, ExperimentStage, IterMut, TemperatureSample, TempRange};
 use crate::time;
 
 /// `Vec<u8>` wrapper
@@ -30,8 +30,7 @@ pub fn experiment_configured_event(
     experiment_id: &str,
     researcher: &str,
     sensors: &Vec<String>,
-    upper_threshold: f32,
-    lower_threshold: f32,
+    temp_range: TempRange,
 ) -> EventWrapper {
     let raw_schema =
         fs::read_to_string("experiment-producer/schemas/experiment_configured.avsc").unwrap();
@@ -48,10 +47,10 @@ pub fn experiment_configured_event(
     let temp_schema_json = &schema_json["fields"][3]["type"];
 
     let temp_schema = Schema::parse_str(&temp_schema_json.to_string()).unwrap();
-    let mut temp_range = Record::new(&temp_schema).unwrap();
-    temp_range.put("upper_threshold", Value::Float(upper_threshold));
-    temp_range.put("lower_threshold", Value::Float(lower_threshold));
-    record.put("temperature_range", temp_range);
+    let mut record_temp_range = Record::new(&temp_schema).unwrap();
+    record_temp_range.put("upper_threshold", Value::Float(temp_range.upper_threshold));
+    record_temp_range.put("lower_threshold", Value::Float(temp_range.lower_threshold));
+    record.put("temperature_range", record_temp_range);
     writer.append(record).unwrap();
 
     EventWrapper(writer.into_inner().unwrap())
