@@ -23,5 +23,7 @@ generic-array = "0.14.7"
 aes-gcm = "0.10.2"
 base64 = "0.21.2"
 jsonwebtoken = "8.3.0"
+sqlx = { version = "0.7", features = [ "runtime-tokio", "postgres" ] }
+dotenv = "0.15.0"
 
 event-hash = { path = "../event-hash" }

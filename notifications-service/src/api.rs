@@ -1,5 +1,4 @@
 use event_hash::{DecryptError, HashData};
-use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use poem::web::Data;
 use poem_openapi::{
     param::Query,
@@ -7,13 +6,15 @@ use poem_openapi::{
     ApiResponse, Enum, Object, OpenApi,
 };
 use serde::{Deserialize, Serialize};
+use sqlx::{Pool, Postgres};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::info;
 
-use crate::jwt::Claims;
+use crate::jwt;
+use crate::store;
 
 #[derive(Debug, Clone)]
-struct SecretKey(String);
+pub struct SecretKey(pub String);
 
 #[derive(Debug, PartialEq, Enum, Serialize, Deserialize)]
 enum BodyNotificationType {
@@ -28,6 +29,49 @@ struct NotifyBody {
     measurement_id: String,
     experiment_id: String,
     cipher_data: String,
+}
+
+impl NotifyBody {
+    fn validate_body(&self, hash_data: &HashData) -> Result<(), NotifyErrorResponse> {
+        if hash_data.measurement_id != self.measurement_id {
+            return Err(NotifyErrorResponse::BadRequest(PlainText(format!(
+                "Unexpected measurement_id `{}`. Expected `{}`",
+                self.measurement_id, hash_data.measurement_id
+            ))));
+        } else if hash_data.experiment_id != self.experiment_id {
+            return Err(NotifyErrorResponse::BadRequest(PlainText(format!(
+                "Unexpected experiment_id `{}`. Expected `{}`",
+                self.experiment_id, hash_data.experiment_id
+            ))));
+        } else if hash_data.researcher != self.researcher {
+            return Err(NotifyErrorResponse::BadRequest(PlainText(format!(
+                "Unexpected researcher `{}`. Expected `{}`",
+                self.researcher, hash_data.researcher
+            ))));
+        }
+        if let None = hash_data.notification_type {
+            return Err(NotifyErrorResponse::BadRequest(PlainText(format!(
+                "Unexpected notification. Measurement `{}` should not have been notified",
+                hash_data.measurement_id
+            ))));
+        }
+
+        let hash_notification = hash_data
+            .notification_type
+            .as_ref()
+            .expect("verify whether hash_data is None beforehand");
+        let hash_notification_string = serde_json::to_string(hash_notification)
+            .expect("Serializable HashData NotificationType");
+        let body_notification_string = serde_json::to_string(&self.notification_type)
+            .expect("Serializable Body NotificationType");
+        if hash_notification_string != body_notification_string {
+            return Err(NotifyErrorResponse::BadRequest(PlainText(format!(
+                "Unexpected notification_type `{:?}`. Expected `{:?}`",
+                self.notification_type, hash_notification
+            ))));
+        }
+        Ok(())
+    }
 }
 
 #[derive(ApiResponse)]
@@ -48,20 +92,9 @@ enum NotifyErrorResponse {
     InternalServerError(PlainText<String>),
 }
 
-pub struct Api;
-
-#[OpenApi]
-impl Api {
-    #[oai(path = "/notify", method = "post")]
-    async fn notify_post(
-        &self,
-        data_secret_key: Data<&SecretKey>,
-        body: Json<NotifyBody>,
-        token: Query<Option<String>>,
-    ) -> Result<NotifyResponse, NotifyErrorResponse> {
-        let secret_key = data_secret_key.0;
-        let key: &[u8] = secret_key.0.as_bytes();
-        let hash_data = HashData::decrypt(key, &body.0.cipher_data).map_err(|e| match e {
+impl From<DecryptError> for NotifyErrorResponse {
+    fn from(e: DecryptError) -> Self {
+        match e {
             DecryptError::MalformedHashDataString => {
                 NotifyErrorResponse::BadRequest(PlainText("Invalid cipher".into()))
             }
@@ -80,75 +113,67 @@ impl Api {
             DecryptError::JsonDeserializationError => NotifyErrorResponse::InternalServerError(
                 PlainText("Could not deserialize json string into HashData.".into()),
             ),
-        })?;
-
-        // validate contents passed in body with the contents in the ciphertext
-        if hash_data.measurement_id != body.measurement_id {
-            return Err(NotifyErrorResponse::BadRequest(PlainText(format!(
-                "Unexpected measurement_id `{}`. Expected `{}`",
-                body.measurement_id, hash_data.measurement_id
-            ))));
-        } else if hash_data.experiment_id != body.experiment_id {
-            return Err(NotifyErrorResponse::BadRequest(PlainText(format!(
-                "Unexpected experiment_id `{}`. Expected `{}`",
-                body.experiment_id, hash_data.experiment_id
-            ))));
-        } else if hash_data.researcher != body.researcher {
-            return Err(NotifyErrorResponse::BadRequest(PlainText(format!(
-                "Unexpected researcher `{}`. Expected `{}`",
-                body.researcher, hash_data.researcher
-            ))));
         }
+    }
+}
 
-        if let None = hash_data.notification_type {
-            return Err(NotifyErrorResponse::BadRequest(PlainText(format!(
-                "Unexpected notification. Measurement `{}` should not have been notified",
-                hash_data.measurement_id
-            ))));
+impl From<sqlx::Error> for NotifyErrorResponse {
+    fn from(e: sqlx::Error) -> Self {
+        info!("sqlx error: {:?}", e);
+        NotifyErrorResponse::InternalServerError(PlainText(format!("Failed to insert values")))
+    }
+}
+
+impl From<jsonwebtoken::errors::Error> for NotifyErrorResponse {
+    fn from(e: jsonwebtoken::errors::Error) -> Self {
+        info!("jsonwebtoken error: {:?}", e);
+        NotifyErrorResponse::InternalServerError(PlainText(format!(
+            "Token must be encoded by ECC private key"
+        )))
+    }
+}
+
+fn compute_latency(ts: f64) -> f64 {
+    let current_time = SystemTime::now();
+    let current_time = current_time
+        .duration_since(UNIX_EPOCH)
+        .expect("Time went backwards");
+    let current_time: f64 =
+        current_time.as_secs() as f64 + current_time.subsec_nanos() as f64 / 1_000_000_000_f64;
+    current_time - ts
+}
+
+pub struct Api;
+
+#[OpenApi]
+impl Api {
+    #[oai(path = "/notify", method = "post")]
+    async fn notify_post(
+        &self,
+        data_secret_key: Data<&SecretKey>,
+        pool: Data<&Option<Pool<Postgres>>>,
+        body: Json<NotifyBody>,
+        token: Query<Option<String>>,
+    ) -> Result<NotifyResponse, NotifyErrorResponse> {
+        let pool = pool.0;
+        let secret_key = data_secret_key.0;
+        let key: &[u8] = secret_key.0.as_bytes();
+        let body = body.0;
+
+        let hash_data = HashData::decrypt(key, &body.cipher_data)?;
+        body.validate_body(&hash_data)?;
+        let latency = compute_latency(hash_data.timestamp);
+
+        if let (Some(token), Some(pool)) = (token.0, pool.as_ref()) {
+            let claims = jwt::decode(&token)?.claims;
+            store::insert_latency(pool, &claims.sub, &body.measurement_id, &latency).await?;
         }
-
-        let hash_notification = hash_data
-            .notification_type
-            .as_ref()
-            .expect("verify whether hash_data is None beforehand");
-        let hash_notification_string = serde_json::to_string(hash_notification)
-            .expect("Serializable HashData NotificationType");
-        let body_notification_string = serde_json::to_string(&body.notification_type)
-            .expect("Serializable Body NotificationType");
-        if hash_notification_string != body_notification_string {
-            return Err(NotifyErrorResponse::BadRequest(PlainText(format!(
-                "Unexpected notification_type `{:?}`. Expected `{:?}`",
-                body.notification_type, hash_notification
-            ))));
-        }
-
-        let current_time = SystemTime::now();
-        let current_time = current_time
-            .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards");
-        let current_time: f64 =
-            current_time.as_secs() as f64 + current_time.subsec_nanos() as f64 / 1_000_000_000_f64;
 
         info!(
             "measurement_id: {}\tlatency: {}s",
-            body.measurement_id,
-            (current_time - hash_data.timestamp)
+            body.measurement_id, latency
         );
-
-        if let Some(token) = token.0 {
-            let token_data = decode::<Claims>(
-                &token,
-                &DecodingKey::from_rsa_pem(include_bytes!("../ca.crt")).unwrap(),
-                &Validation::new(Algorithm::RS256),
-            )
-            .expect("Token must be encoded by ECC private key");
-            println!("{:?}", token_data);
-        }
-
-        Ok(NotifyResponse::Ok(PlainText(format!(
-            "{}",
-            current_time - hash_data.timestamp
-        ))))
+        Ok(NotifyResponse::Ok(PlainText(format!("{}", latency))))
     }
 }
 
@@ -202,11 +227,16 @@ mod test {
         b64_nonce + "." + &b64_cipher
     }
 
-    fn get_client() -> TestClient<AddDataEndpoint<Route, SecretKey>> {
+    fn get_client(
+    ) -> TestClient<AddDataEndpoint<AddDataEndpoint<Route, SecretKey>, Option<Pool<Postgres>>>>
+    {
         let secret_key = SecretKey(SECRET_KEY.into());
         let api_service =
             OpenApiService::new(Api, "Hello World", "1.0").server("http://localhost:3000/api");
-        let app = Route::new().nest("/api", api_service).data(secret_key);
+        let app = Route::new()
+            .nest("/api", api_service)
+            .data(secret_key)
+            .data(None);
         TestClient::new(app)
     }
 
@@ -224,7 +254,8 @@ mod test {
             "experiment_id": "5678",
             "cipher_data": cipher_data
         });
-        let res = client.post("/api/notify").body_json(&body).send().await;
+        let mut res = client.post("/api/notify").body_json(&body).send().await;
+        println!("{:?}", res.0.take_body());
         assert_eq!(res.0.status(), 200);
     }
 
