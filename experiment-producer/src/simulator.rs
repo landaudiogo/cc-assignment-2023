@@ -2,6 +2,7 @@ use rand::Rng;
 use std::time::Duration;
 use tokio::time;
 use rdkafka::message::OwnedHeaders;
+use futures::future;
 
 use crate::events::{self, KafkaTopicProducer, RecordData};
 
@@ -149,15 +150,21 @@ impl Experiment {
             &self.config.secret_key,
         );
         for sensor_events in stabilization_events {
+            let mut handles = vec![];
             for event in sensor_events {
                 let record = RecordData {
                     payload: event,
-                    key: Some(&self.config.experiment_id),
+                    key: Some(self.config.experiment_id.clone()),
                     headers: OwnedHeaders::new().add("record_name", "sensor_temperature_measured")
                 };
-                let delivery_result = self.producer.send_event(record).await;
-                println!("sensor measurement result {:?}", delivery_result);
+                let producer = self.producer.clone();
+                handles.push(tokio::spawn(async move {
+                    let delivery_result = producer.send_event(record).await;
+                    println!("sensor measurement result {:?}", delivery_result);
+                }));
             }
+            future::join_all(handles).await;
+
             println!("Temperature Measured Events");
             time::sleep(Duration::from_millis(self.config.sample_rate)).await;
         }
@@ -183,15 +190,21 @@ impl Experiment {
             &self.config.secret_key,
         );
         for sensor_events in carry_out_events {
+            let mut handles = vec![];
             for event in sensor_events {
                 let record = RecordData {
                     payload: event,
-                    key: Some(&self.config.experiment_id),
+                    key: Some(self.config.experiment_id.clone()),
                     headers: OwnedHeaders::new().add("record_name", "sensor_temperature_measured")
                 };
-                let delivery_result = self.producer.send_event(record).await;
-                println!("sensor measurement result {:?}", delivery_result);
+                let producer = self.producer.clone();
+                handles.push(tokio::spawn(async move {
+                    let delivery_result = producer.send_event(record).await;
+                    println!("sensor measurement result {:?}", delivery_result);
+                }));
             }
+
+            future::join_all(handles).await;
             println!("Temperature Measured Events");
             time::sleep(Duration::from_millis(self.config.sample_rate)).await;
         }

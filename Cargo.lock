@@ -658,6 +658,7 @@ dependencies = [
  "apache-avro",
  "clap",
  "event-hash",
+ "futures",
  "rand",
  "rdkafka",
  "serde",

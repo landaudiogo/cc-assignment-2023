@@ -225,6 +225,7 @@ pub struct RecordData<K: ToBytes, T: ToBytes> {
     pub headers: OwnedHeaders,
 }
 
+#[derive(Clone)]
 pub struct KafkaTopicProducer {
     topic: String,
     producer: FutureProducer, // partition: Option<usize>
