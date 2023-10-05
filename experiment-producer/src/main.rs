@@ -1,5 +1,7 @@
 use uuid::Uuid;
 use clap::{command, ArgAction, Arg, value_parser};
+use tokio::time::{self as tktime, Duration};
+use futures::future;
 
 mod events;
 mod simulator;
@@ -105,10 +107,29 @@ async fn main() {
         carry_out_samples: matches.remove_one::<u16>("carry-out-samples").expect("required"),
     };
 
-    let mut experiment = Experiment::new(
-        matches.remove_one::<f32>("start-temperature").expect("required"), 
-        experiment_config,
-        topic_producer,
-    );
-    experiment.run().await;
+    let start_temperature = matches.remove_one::<f32>("start-temperature").expect("required");
+    let start_time = time::current_epoch();
+    let start_offsets = vec![1, 5];
+    let mut handles = vec![];
+
+    for task_sleep in start_offsets.into_iter() {
+        let topic_producer = topic_producer.clone();
+        let experiment_config = experiment_config.clone();
+        let start_temperature = start_temperature.clone();
+
+        handles.push(tokio::spawn(async move {
+            tktime::sleep(Duration::from_millis(task_sleep * 1000)).await;
+            let current_time = time::current_epoch();
+            println!("{} {}", current_time - start_time, task_sleep);
+
+            let mut experiment = Experiment::new(
+                start_temperature, 
+                experiment_config,
+                topic_producer,
+            );
+            experiment.run().await;
+
+        }));
+    }
+    future::join_all(handles).await;
 }

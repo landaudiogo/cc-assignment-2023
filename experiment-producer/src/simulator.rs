@@ -77,6 +77,7 @@ impl TemperatureSample {
     }
 }
 
+#[derive(Clone)]
 pub struct ExperimentConfiguration {
     pub experiment_id: String,
     pub researcher: String,

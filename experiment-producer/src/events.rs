@@ -186,7 +186,7 @@ pub fn temperature_events<'a>(
     sensors: &'a Vec<String>,
     stage: &'a ExperimentStage,
     secret_key: &'a str,
-) -> Box<dyn Iterator<Item = Vec<EventWrapper>> + 'a> {
+) -> Box<dyn Iterator<Item = Vec<EventWrapper>> + 'a + Send> {
     let mut prev_sample = None;
 
     Box::new(sample_iter.map(move |sample| {
