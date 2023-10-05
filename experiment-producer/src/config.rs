@@ -24,7 +24,6 @@ impl ConfigFile {
 pub struct ConfigEntry {
     pub start_time: u64,
     pub researcher: String,
-    pub secret_key: String,
 
     #[serde(default = "ConfigEntry::default_num_sensors")]
     pub num_sensors: usize,
@@ -43,6 +42,9 @@ pub struct ConfigEntry {
 
     #[serde(default = "ConfigEntry::default_start_temperature")]
     pub start_temperature: f32,
+
+    #[serde(skip)]
+    pub secret_key: String,
 }
 
 impl ConfigEntry {
@@ -68,5 +70,9 @@ impl ConfigEntry {
 
     fn default_start_temperature() -> f32 {
         0.0
+    }
+
+    pub fn set_secret_key(&mut self, secret_key: &str) {
+        self.secret_key = secret_key.into();
     }
 }

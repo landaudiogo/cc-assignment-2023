@@ -1,7 +1,6 @@
-use clap::{command, value_parser, Arg, ArgAction};
+use clap::{command, value_parser, Arg, ArgAction, ArgMatches};
 use futures::future;
 use tokio::time::{self as tktime, Duration};
-use uuid::Uuid;
 
 mod config;
 mod events;
@@ -11,6 +10,82 @@ mod time;
 use config::ConfigFile;
 use events::KafkaTopicProducer;
 use simulator::{Experiment, ExperimentConfiguration, TempRange};
+
+
+async fn run_single_experiment(mut matches: ArgMatches) {
+    let topic_producer = KafkaTopicProducer::new(
+        &matches
+            .remove_one::<String>("broker-list")
+            .expect("required"),
+        &matches.remove_one::<String>("topic").expect("required"),
+    );
+
+    let experiment_config = ExperimentConfiguration::new(
+        "d.landau@uu.nl".into(),
+        matches
+            .remove_one::<u8>("num-sensors")
+            .expect("required")
+            .into(),
+        matches.remove_one::<u64>("sample-rate").expect("required"),
+        TempRange::new(
+            matches
+                .remove_one::<f32>("lower-threshold")
+                .expect("required"),
+            matches
+                .remove_one::<f32>("upper-threshold")
+                .expect("required"),
+        )
+        .expect("upper-threshold should be higher than lower_threshold"),
+        matches
+            .remove_one::<u16>("stabilization-samples")
+            .expect("required"),
+        matches
+            .remove_one::<u16>("carry-out-samples")
+            .expect("required"),
+        matches
+            .remove_one::<String>("secret-key")
+            .expect("required"),
+    );
+
+    let start_temperature = matches
+        .remove_one::<f32>("start-temperature")
+        .expect("required");
+
+    let mut experiment = Experiment::new(start_temperature, experiment_config, topic_producer);
+    experiment.run().await;
+}
+
+async fn run_multiple_experiments(mut matches: ArgMatches, config_file: &str) {
+    let topic_producer = KafkaTopicProducer::new(
+        &matches
+            .remove_one::<String>("broker-list")
+            .expect("required"),
+        &matches.remove_one::<String>("topic").expect("required"),
+    );
+
+    let config = ConfigFile::from_file(config_file);
+    let start_time = time::current_epoch();
+    let mut handles = vec![];
+
+    for mut entry in config.0 {
+        let start_temperature = entry.start_temperature;
+        let start_offset = entry.start_time;
+        entry.set_secret_key(&matches.get_one::<String>("secret-key").expect("required"));
+        let experiment_config = ExperimentConfiguration::from(entry);
+        let topic_producer = topic_producer.clone();
+
+        handles.push(tokio::spawn(async move {
+            tktime::sleep(Duration::from_millis(start_offset * 1000)).await;
+            let current_time = time::current_epoch();
+            println!("{} {}", current_time - start_time, start_offset);
+
+            let mut experiment =
+                Experiment::new(start_temperature, experiment_config, topic_producer);
+            experiment.run().await;
+        }));
+    }
+    future::join_all(handles).await;
+}
 
 #[tokio::main]
 async fn main() {
@@ -92,72 +167,9 @@ async fn main() {
         )
         .get_matches();
 
-    let topic_producer = KafkaTopicProducer::new(
-        &matches
-            .remove_one::<String>("broker-list")
-            .expect("required"),
-        &matches.remove_one::<String>("topic").expect("required"),
-    );
-
-    if let Some(config_file) = matches.get_one::<String>("config-file") {
-        let config = ConfigFile::from_file(&config_file);
-        println!("{:#?}", config);
-
-        let start_time = time::current_epoch();
-        let mut handles = vec![];
-        for entry in config.0 {
-            let start_temperature = entry.start_temperature;
-            let start_offset = entry.start_time;
-            let experiment_config = ExperimentConfiguration::from(entry);
-            let topic_producer = topic_producer.clone();
-            handles.push(tokio::spawn(async move {
-                tktime::sleep(Duration::from_millis(start_offset * 1000)).await;
-                let current_time = time::current_epoch();
-                println!("{} {}", current_time - start_time, start_offset);
-
-                let mut experiment =
-                    Experiment::new(start_temperature, experiment_config, topic_producer);
-                experiment.run().await;
-            }));
-        }
-        future::join_all(handles).await;
+    if let Some(config_file) = matches.remove_one::<String>("config-file") {
+        run_multiple_experiments(matches, &config_file).await;
     } else {
-        let num_sensors = matches.remove_one::<u8>("num-sensors").expect("required");
-        let experiment_config = ExperimentConfiguration {
-            experiment_id: format!("{}", Uuid::new_v4()),
-            researcher: "d.landau@uu.nl".into(),
-            sensors: (0..num_sensors)
-                .map(|_| format!("{}", Uuid::new_v4()))
-                .collect(),
-            sample_rate: matches.remove_one::<u64>("sample-rate").expect("required"),
-            secret_key: matches
-                .remove_one::<String>("secret-key")
-                .expect("required")
-                .clone(),
-            temp_range: TempRange::new(
-                matches
-                    .remove_one::<f32>("lower-threshold")
-                    .expect("required"),
-                matches
-                    .remove_one::<f32>("upper-threshold")
-                    .expect("required"),
-            )
-            .unwrap(),
-            stabilization_samples: matches
-                .remove_one::<u16>("stabilization-samples")
-                .expect("required"),
-            carry_out_samples: matches
-                .remove_one::<u16>("carry-out-samples")
-                .expect("required"),
-        };
-
-        let start_temperature = matches
-            .remove_one::<f32>("start-temperature")
-            .expect("required");
-
-        let topic_producer = topic_producer.clone();
-
-        let mut experiment = Experiment::new(start_temperature, experiment_config, topic_producer);
-        experiment.run().await;
+        run_single_experiment(matches).await;
     }
 }

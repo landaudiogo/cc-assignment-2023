@@ -98,14 +98,40 @@ impl TemperatureSample {
 
 #[derive(Clone, Debug)]
 pub struct ExperimentConfiguration {
-    pub experiment_id: String,
-    pub researcher: String,
-    pub sensors: Vec<String>,
-    pub sample_rate: u64,
-    pub temp_range: TempRange,
-    pub stabilization_samples: u16,
-    pub carry_out_samples: u16,
-    pub secret_key: String,
+    experiment_id: String,
+    researcher: String,
+    sensors: Vec<String>,
+    sample_rate: u64,
+    temp_range: TempRange,
+    stabilization_samples: u16,
+    carry_out_samples: u16,
+    secret_key: String,
+}
+
+impl ExperimentConfiguration {
+    pub fn new(
+        researcher: String,
+        num_sensors: usize,
+        sample_rate: u64,
+        temp_range: TempRange,
+        stabilization_samples: u16,
+        carry_out_samples: u16,
+        secret_key: String,
+    ) -> Self {
+        let sensors: Vec<_> = (0..num_sensors)
+            .map(|_| format!("{}", Uuid::new_v4()))
+            .collect();
+        Self {
+            experiment_id: format!("{}", Uuid::new_v4()),
+            researcher,
+            sensors,
+            sample_rate,
+            temp_range,
+            stabilization_samples,
+            carry_out_samples,
+            secret_key,
+        }
+    }
 }
 
 impl From<ConfigEntry> for ExperimentConfiguration {
@@ -121,20 +147,15 @@ impl From<ConfigEntry> for ExperimentConfiguration {
             secret_key,
             start_temperature,
         } = config_entry;
-
-        let sensors: Vec<_> = (0..num_sensors)
-            .map(|_| format!("{}", Uuid::new_v4()))
-            .collect();
-        Self {
-            experiment_id: format!("{}", Uuid::new_v4()),
+        Self::new(
             researcher,
-            sensors,
+            num_sensors,
             sample_rate,
             temp_range,
             stabilization_samples,
             carry_out_samples,
             secret_key,
-        }
+        )
     }
 }
 

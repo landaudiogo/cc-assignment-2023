@@ -2,7 +2,6 @@
     {
         "start_time": 10,
         "researcher": "d.landau@uu.nl",
-        "secret_key": "QJUHsPhnA0eiqHuJqsPgzhDozYO4f1zh",
         "num_sensors": 4,
         "sample_rate": 200,
         "start_temperature": 0,
