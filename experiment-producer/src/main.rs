@@ -1,15 +1,16 @@
-use uuid::Uuid;
-use clap::{command, ArgAction, Arg, value_parser};
-use tokio::time::{self as tktime, Duration};
+use clap::{command, value_parser, Arg, ArgAction};
 use futures::future;
+use tokio::time::{self as tktime, Duration};
+use uuid::Uuid;
 
+mod config;
 mod events;
 mod simulator;
 mod time;
 
+use config::ConfigFile;
 use events::KafkaTopicProducer;
 use simulator::{Experiment, ExperimentConfiguration, TempRange};
-
 
 #[tokio::main]
 async fn main() {
@@ -21,6 +22,11 @@ async fn main() {
             .action(ArgAction::Set)
             .default_value("QJUHsPhnA0eiqHuJqsPgzhDozYO4f1zh")
             .help("<key> is a 32 character string that must match the key being passed to the notifications-service")
+        )
+        .arg(Arg::new("config-file")
+            .required(false)
+            .action(ArgAction::Set)
+            .long("config-file")
         )
         .arg(Arg::new("broker-list")
             .required(true)
@@ -87,49 +93,71 @@ async fn main() {
         .get_matches();
 
     let topic_producer = KafkaTopicProducer::new(
-        &matches.remove_one::<String>("broker-list").expect("required"), 
+        &matches
+            .remove_one::<String>("broker-list")
+            .expect("required"),
         &matches.remove_one::<String>("topic").expect("required"),
     );
 
-    let num_sensors = matches.remove_one::<u8>("num-sensors").expect("required");
+    if let Some(config_file) = matches.get_one::<String>("config-file") {
+        let config = ConfigFile::from_file(&config_file);
+        println!("{:#?}", config);
 
-    let experiment_config = ExperimentConfiguration {
-        experiment_id: format!("{}", Uuid::new_v4()),
-        researcher: "d.landau@uu.nl".into(),
-        sensors: (0..num_sensors).map(|_| format!("{}", Uuid::new_v4())).collect(),
-        sample_rate: matches.remove_one::<u64>("sample-rate").expect("required"),
-        secret_key: matches.remove_one::<String>("secret-key").expect("required").clone(),
-        temp_range: TempRange::new(
-            matches.remove_one::<f32>("lower-threshold").expect("required"), 
-            matches.remove_one::<f32>("upper-threshold").expect("required"), 
-        ).unwrap(),
-        stabilization_samples: matches.remove_one::<u16>("stabilization-samples").expect("required"),
-        carry_out_samples: matches.remove_one::<u16>("carry-out-samples").expect("required"),
-    };
+        let start_time = time::current_epoch();
+        let mut handles = vec![];
+        for entry in config.0 {
+            let start_temperature = entry.start_temperature;
+            let start_offset = entry.start_time;
+            let experiment_config = ExperimentConfiguration::from(entry);
+            let topic_producer = topic_producer.clone();
+            handles.push(tokio::spawn(async move {
+                tktime::sleep(Duration::from_millis(start_offset * 1000)).await;
+                let current_time = time::current_epoch();
+                println!("{} {}", current_time - start_time, start_offset);
 
-    let start_temperature = matches.remove_one::<f32>("start-temperature").expect("required");
-    let start_time = time::current_epoch();
-    let start_offsets = vec![1, 5];
-    let mut handles = vec![];
+                let mut experiment =
+                    Experiment::new(start_temperature, experiment_config, topic_producer);
+                experiment.run().await;
+            }));
+        }
+        future::join_all(handles).await;
+    } else {
+        let num_sensors = matches.remove_one::<u8>("num-sensors").expect("required");
+        let experiment_config = ExperimentConfiguration {
+            experiment_id: format!("{}", Uuid::new_v4()),
+            researcher: "d.landau@uu.nl".into(),
+            sensors: (0..num_sensors)
+                .map(|_| format!("{}", Uuid::new_v4()))
+                .collect(),
+            sample_rate: matches.remove_one::<u64>("sample-rate").expect("required"),
+            secret_key: matches
+                .remove_one::<String>("secret-key")
+                .expect("required")
+                .clone(),
+            temp_range: TempRange::new(
+                matches
+                    .remove_one::<f32>("lower-threshold")
+                    .expect("required"),
+                matches
+                    .remove_one::<f32>("upper-threshold")
+                    .expect("required"),
+            )
+            .unwrap(),
+            stabilization_samples: matches
+                .remove_one::<u16>("stabilization-samples")
+                .expect("required"),
+            carry_out_samples: matches
+                .remove_one::<u16>("carry-out-samples")
+                .expect("required"),
+        };
 
-    for task_sleep in start_offsets.into_iter() {
+        let start_temperature = matches
+            .remove_one::<f32>("start-temperature")
+            .expect("required");
+
         let topic_producer = topic_producer.clone();
-        let experiment_config = experiment_config.clone();
-        let start_temperature = start_temperature.clone();
 
-        handles.push(tokio::spawn(async move {
-            tktime::sleep(Duration::from_millis(task_sleep * 1000)).await;
-            let current_time = time::current_epoch();
-            println!("{} {}", current_time - start_time, task_sleep);
-
-            let mut experiment = Experiment::new(
-                start_temperature, 
-                experiment_config,
-                topic_producer,
-            );
-            experiment.run().await;
-
-        }));
+        let mut experiment = Experiment::new(start_temperature, experiment_config, topic_producer);
+        experiment.run().await;
     }
-    future::join_all(handles).await;
 }

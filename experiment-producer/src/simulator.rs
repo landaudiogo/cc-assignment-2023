@@ -1,9 +1,12 @@
+use futures::future;
 use rand::Rng;
+use rdkafka::message::OwnedHeaders;
+use serde::Deserialize;
 use std::time::Duration;
 use tokio::time;
-use rdkafka::message::OwnedHeaders;
-use futures::future;
+use uuid::Uuid;
 
+use crate::config::{ConfigEntry, UncheckedTempRange};
 use crate::events::{self, KafkaTopicProducer, RecordData};
 
 #[derive(Clone, Copy)]
@@ -15,10 +18,26 @@ pub enum ExperimentStage {
     Terminated,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(try_from = "UncheckedTempRange")]
 pub struct TempRange {
     pub lower_threshold: f32,
     pub upper_threshold: f32,
+}
+
+impl TryFrom<UncheckedTempRange> for TempRange {
+    type Error = String;
+
+    fn try_from(unchecked_temp_range: UncheckedTempRange) -> Result<Self, Self::Error> {
+        Self::new(
+            unchecked_temp_range.lower_threshold,
+            unchecked_temp_range.upper_threshold,
+        )
+        .ok_or(format!(
+            "Invalid temperature range for experiment: {:?}",
+            unchecked_temp_range
+        ))
+    }
 }
 
 impl TempRange {
@@ -77,7 +96,7 @@ impl TemperatureSample {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ExperimentConfiguration {
     pub experiment_id: String,
     pub researcher: String,
@@ -89,6 +108,36 @@ pub struct ExperimentConfiguration {
     pub secret_key: String,
 }
 
+impl From<ConfigEntry> for ExperimentConfiguration {
+    fn from(config_entry: ConfigEntry) -> ExperimentConfiguration {
+        let ConfigEntry {
+            num_sensors,
+            researcher,
+            sample_rate,
+            temp_range,
+            stabilization_samples,
+            carry_out_samples,
+            start_time,
+            secret_key,
+            start_temperature,
+        } = config_entry;
+
+        let sensors: Vec<_> = (0..num_sensors)
+            .map(|_| format!("{}", Uuid::new_v4()))
+            .collect();
+        Self {
+            experiment_id: format!("{}", Uuid::new_v4()),
+            researcher,
+            sensors,
+            sample_rate,
+            temp_range,
+            stabilization_samples,
+            carry_out_samples,
+            secret_key,
+        }
+    }
+}
+
 pub struct Experiment {
     sample: TemperatureSample,
     stage: ExperimentStage,
@@ -97,11 +146,7 @@ pub struct Experiment {
 }
 
 impl Experiment {
-    pub fn new(
-        start: f32,
-        config: ExperimentConfiguration,
-        producer: KafkaTopicProducer,
-    ) -> Self {
+    pub fn new(start: f32, config: ExperimentConfiguration, producer: KafkaTopicProducer) -> Self {
         let sample = TemperatureSample {
             cur: start,
             temp_range: config.temp_range,
@@ -124,7 +169,7 @@ impl Experiment {
                 self.config.temp_range,
             ),
             key: Some(&self.config.experiment_id),
-            headers: OwnedHeaders::new().add("record_name", "experiment_configured")
+            headers: OwnedHeaders::new().add("record_name", "experiment_configured"),
         };
         let delivery_result = self.producer.send_event(record).await;
         println!("Experiment Configured Event {:?}", delivery_result);
@@ -135,13 +180,15 @@ impl Experiment {
         let record = RecordData {
             payload: events::stabilization_started_event(&self.config.experiment_id),
             key: Some(&self.config.experiment_id),
-            headers: OwnedHeaders::new().add("record_name", "stabilization_started")
+            headers: OwnedHeaders::new().add("record_name", "stabilization_started"),
         };
         let delivery_result = self.producer.send_event(record).await;
         println!("Stabilization Started Event {:?}", delivery_result);
 
         // Stabilization Temperature Samples
-        let stabilization_samples = self.sample.stabilization_samples(self.config.stabilization_samples.into());
+        let stabilization_samples = self
+            .sample
+            .stabilization_samples(self.config.stabilization_samples.into());
         let stabilization_events = events::temperature_events(
             stabilization_samples,
             &self.config.experiment_id,
@@ -156,7 +203,7 @@ impl Experiment {
                 let record = RecordData {
                     payload: event,
                     key: Some(self.config.experiment_id.clone()),
-                    headers: OwnedHeaders::new().add("record_name", "sensor_temperature_measured")
+                    headers: OwnedHeaders::new().add("record_name", "sensor_temperature_measured"),
                 };
                 let producer = self.producer.clone();
                 handles.push(tokio::spawn(async move {
@@ -176,12 +223,14 @@ impl Experiment {
         let record = RecordData {
             payload: events::experiment_started_event(&self.config.experiment_id),
             key: Some(&self.config.experiment_id),
-            headers: OwnedHeaders::new().add("record_name", "experiment_started")
+            headers: OwnedHeaders::new().add("record_name", "experiment_started"),
         };
         let delivery_result = self.producer.send_event(record).await;
         println!("Experiment Started Event {:?}", delivery_result);
 
-        let carry_out_samples = self.sample.carry_out_samples(self.config.carry_out_samples.into());
+        let carry_out_samples = self
+            .sample
+            .carry_out_samples(self.config.carry_out_samples.into());
         let carry_out_events = events::temperature_events(
             carry_out_samples,
             &self.config.experiment_id,
@@ -196,7 +245,7 @@ impl Experiment {
                 let record = RecordData {
                     payload: event,
                     key: Some(self.config.experiment_id.clone()),
-                    headers: OwnedHeaders::new().add("record_name", "sensor_temperature_measured")
+                    headers: OwnedHeaders::new().add("record_name", "sensor_temperature_measured"),
                 };
                 let producer = self.producer.clone();
                 handles.push(tokio::spawn(async move {
@@ -214,7 +263,7 @@ impl Experiment {
         let record = RecordData {
             payload: events::experiment_terminated_event(&self.config.experiment_id),
             key: Some(&self.config.experiment_id),
-            headers: OwnedHeaders::new().add("record_name", "experiment_terminated")
+            headers: OwnedHeaders::new().add("record_name", "experiment_terminated"),
         };
         let delivery_result = self.producer.send_event(record).await;
         println!("Experiment Terminated Event {:?}", delivery_result);
