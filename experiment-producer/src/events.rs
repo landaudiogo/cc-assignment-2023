@@ -1,9 +1,9 @@
 use apache_avro::types::{Record, Value};
-use apache_avro::{Schema, Writer, Reader};
+use apache_avro::{Reader, Schema, Writer};
 use rdkafka::{
     config::ClientConfig,
     error::KafkaError,
-    message::{OwnedMessage, ToBytes, OwnedHeaders},
+    message::{OwnedHeaders, OwnedMessage, ToBytes},
     producer::{FutureProducer, FutureRecord},
 };
 use std::{fs, time::Duration};
@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use event_hash::{HashData, NotificationType};
 
-use crate::simulator::{self, ExperimentStage, IterMut, TemperatureSample, TempRange};
+use crate::simulator::{self, ExperimentStage, IterMut, TempRange, TemperatureSample};
 use crate::time;
 
 /// `Vec<u8>` wrapper
@@ -238,7 +238,10 @@ impl KafkaTopicProducer {
             .set("message.timeout.ms", "5000")
             .set("security.protocol", "SSL")
             .set("ssl.ca.location", "experiment-producer/auth/ca.crt")
-            .set("ssl.keystore.location", "experiment-producer/auth/kafka.keystore.pkcs12")
+            .set(
+                "ssl.keystore.location",
+                "experiment-producer/auth/kafka.keystore.pkcs12",
+            )
             .set("ssl.keystore.password", "cc2023")
             .create()
             .expect("Producer creation error");
@@ -256,8 +259,9 @@ impl KafkaTopicProducer {
         T: ToBytes,
         K: ToBytes,
     {
-        let mut future_record: FutureRecord<'_, K, T> =
-            FutureRecord::to(&self.topic).payload(&record.payload).headers(record.headers);
+        let mut future_record: FutureRecord<'_, K, T> = FutureRecord::to(&self.topic)
+            .payload(&record.payload)
+            .headers(record.headers);
         if record.key.is_some() {
             future_record = future_record.key(record.key.as_ref().unwrap());
         }
