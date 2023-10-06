@@ -1,6 +1,8 @@
 use clap::{command, value_parser, Arg, ArgAction, ArgMatches};
 use futures::future;
 use tokio::time::{self as tktime, Duration};
+use tracing::{span, Instrument, Level};
+use tracing_subscriber;
 
 mod config;
 mod events;
@@ -10,7 +12,6 @@ mod time;
 use config::ConfigFile;
 use events::KafkaTopicProducer;
 use simulator::{Experiment, ExperimentConfiguration, TempRange};
-
 
 async fn run_single_experiment(mut matches: ArgMatches) {
     let topic_producer = KafkaTopicProducer::new(
@@ -74,21 +75,33 @@ async fn run_multiple_experiments(mut matches: ArgMatches, config_file: &str) {
         let experiment_config = ExperimentConfiguration::from(entry);
         let topic_producer = topic_producer.clone();
 
-        handles.push(tokio::spawn(async move {
-            tktime::sleep(Duration::from_millis(start_offset * 1000)).await;
-            let current_time = time::current_epoch();
-            println!("{} {}", current_time - start_time, start_offset);
+        let span = span!(
+            Level::INFO,
+            "experiment",
+            experiment_id = experiment_config.experiment_id
+        );
+        handles.push(tokio::spawn(
+            async move {
+                tktime::sleep(Duration::from_millis(start_offset * 1000)).await;
+                let current_time = time::current_epoch();
+                println!("{} {}", current_time - start_time, start_offset);
 
-            let mut experiment =
-                Experiment::new(start_temperature, experiment_config, topic_producer);
-            experiment.run().await;
-        }));
+                let mut experiment =
+                    Experiment::new(start_temperature, experiment_config, topic_producer);
+                experiment.run().await;
+            }
+            .instrument(span),
+        ));
     }
     future::join_all(handles).await;
 }
 
 #[tokio::main]
 async fn main() {
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::INFO)
+        .init();
+
     let mut matches = command!() // requires `cargo` feature
         .next_line_help(true)
         .arg(Arg::new("secret-key")

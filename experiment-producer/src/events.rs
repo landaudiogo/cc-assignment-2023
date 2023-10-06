@@ -7,6 +7,7 @@ use rdkafka::{
     producer::{FutureProducer, FutureRecord},
 };
 use std::{fs, time::Duration};
+use tracing::{debug, info};
 use uuid::Uuid;
 
 use event_hash::{HashData, NotificationType};
@@ -127,11 +128,6 @@ pub fn temperature_measured_event(
 
     writer.append(record).unwrap();
     let encoded = writer.into_inner().unwrap();
-
-    let reader = Reader::new(&encoded[..]).unwrap();
-    for _value in reader {
-        // println!("{:#?}", value);
-    }
     EventWrapper(encoded)
 }
 
@@ -143,7 +139,7 @@ fn compute_notification_type(
     match (stage, prev_sample) {
         (ExperimentStage::Stabilization, Some(prev_sample)) => {
             if !curr_sample.is_out_of_range() && prev_sample.is_out_of_range() {
-                println!("=== Stabilized ===");
+                info!(range_event = "Stabilized");
                 Some(NotificationType::Stabilized)
             } else {
                 None
@@ -151,7 +147,7 @@ fn compute_notification_type(
         }
         (ExperimentStage::CarryOut, Some(prev_sample)) => {
             if curr_sample.is_out_of_range() && !prev_sample.is_out_of_range() {
-                println!("=== Out of Range ===");
+                info!(range_event = "OutOfRange");
                 Some(NotificationType::OutOfRange)
             } else {
                 None
@@ -159,7 +155,7 @@ fn compute_notification_type(
         }
         (ExperimentStage::Stabilization, None) => {
             if !curr_sample.is_out_of_range() {
-                println!("=== Stabilized ===");
+                info!(range_event = "Stabilized");
                 Some(NotificationType::Stabilized)
             } else {
                 None
@@ -167,7 +163,7 @@ fn compute_notification_type(
         }
         (ExperimentStage::CarryOut, None) => {
             if curr_sample.is_out_of_range() {
-                println!("=== Out of Range ===");
+                info!(range_event = "OutOfRange");
                 Some(NotificationType::OutOfRange)
             } else {
                 None
@@ -262,6 +258,12 @@ impl KafkaTopicProducer {
         let mut future_record: FutureRecord<'_, K, T> = FutureRecord::to(&self.topic)
             .payload(&record.payload)
             .headers(record.headers);
+
+        let reader = Reader::new(record.payload.to_bytes()).unwrap();
+        for _value in reader {
+            debug!("{:?}", _value.unwrap());
+        }
+
         if record.key.is_some() {
             future_record = future_record.key(record.key.as_ref().unwrap());
         }

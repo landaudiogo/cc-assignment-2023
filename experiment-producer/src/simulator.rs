@@ -4,6 +4,7 @@ use rdkafka::message::OwnedHeaders;
 use serde::Deserialize;
 use std::time::Duration;
 use tokio::time;
+use tracing::{debug, info, Instrument, Span};
 use uuid::Uuid;
 
 use crate::config::{ConfigEntry, UncheckedTempRange};
@@ -98,7 +99,7 @@ impl TemperatureSample {
 
 #[derive(Clone, Debug)]
 pub struct ExperimentConfiguration {
-    experiment_id: String,
+    pub experiment_id: String,
     researcher: String,
     sensors: Vec<String>,
     sample_rate: u64,
@@ -192,8 +193,10 @@ impl Experiment {
             key: Some(&self.config.experiment_id),
             headers: OwnedHeaders::new().add("record_name", "experiment_configured"),
         };
-        let delivery_result = self.producer.send_event(record).await;
-        println!("Experiment Configured Event {:?}", delivery_result);
+        self.producer
+            .send_event(record)
+            .await
+            .expect("Failed to produce message");
     }
 
     async fn stage_stabilization(&mut self) {
@@ -203,8 +206,10 @@ impl Experiment {
             key: Some(&self.config.experiment_id),
             headers: OwnedHeaders::new().add("record_name", "stabilization_started"),
         };
-        let delivery_result = self.producer.send_event(record).await;
-        println!("Stabilization Started Event {:?}", delivery_result);
+        self.producer
+            .send_event(record)
+            .await
+            .expect("Failed to produce message");
 
         // Stabilization Temperature Samples
         let stabilization_samples = self
@@ -227,14 +232,20 @@ impl Experiment {
                     headers: OwnedHeaders::new().add("record_name", "sensor_temperature_measured"),
                 };
                 let producer = self.producer.clone();
-                handles.push(tokio::spawn(async move {
-                    let delivery_result = producer.send_event(record).await;
-                    println!("sensor measurement result {:?}", delivery_result);
-                }));
+                let span = Span::current();
+                handles.push(tokio::spawn(
+                    async move {
+                        producer
+                            .send_event(record)
+                            .await
+                            .expect("Failed to produce message");
+                    }
+                    .instrument(span),
+                ));
             }
             future::join_all(handles).await;
 
-            println!("Temperature Measured Events");
+            info!("Temperature Measured Events");
             time::sleep(Duration::from_millis(self.config.sample_rate)).await;
         }
     }
@@ -246,8 +257,10 @@ impl Experiment {
             key: Some(&self.config.experiment_id),
             headers: OwnedHeaders::new().add("record_name", "experiment_started"),
         };
-        let delivery_result = self.producer.send_event(record).await;
-        println!("Experiment Started Event {:?}", delivery_result);
+        self.producer
+            .send_event(record)
+            .await
+            .expect("Failed to produce message");
 
         let carry_out_samples = self
             .sample
@@ -269,14 +282,20 @@ impl Experiment {
                     headers: OwnedHeaders::new().add("record_name", "sensor_temperature_measured"),
                 };
                 let producer = self.producer.clone();
-                handles.push(tokio::spawn(async move {
-                    let delivery_result = producer.send_event(record).await;
-                    println!("sensor measurement result {:?}", delivery_result);
-                }));
+                let span = Span::current();
+                handles.push(tokio::spawn(
+                    async move {
+                        producer
+                            .send_event(record)
+                            .await
+                            .expect("Failed to produce message");
+                    }
+                    .instrument(span),
+                ));
             }
 
             future::join_all(handles).await;
-            println!("Temperature Measured Events");
+            debug!("Temperature Measured Events");
             time::sleep(Duration::from_millis(self.config.sample_rate)).await;
         }
 
@@ -286,17 +305,19 @@ impl Experiment {
             key: Some(&self.config.experiment_id),
             headers: OwnedHeaders::new().add("record_name", "experiment_terminated"),
         };
-        let delivery_result = self.producer.send_event(record).await;
-        println!("Experiment Terminated Event {:?}", delivery_result);
+        self.producer
+            .send_event(record)
+            .await
+            .expect("Failed to produce message");
     }
 
     pub async fn run(&mut self) {
-        println!("=== Stage Configuration ===");
+        info!(stage = "configuration");
         self.stage_configuration().await;
         time::sleep(Duration::from_millis(2000)).await;
-        println!("=== Stage Stabilization ===");
+        info!(stage = "stabilization");
         self.stage_stabilization().await;
-        println!("=== Stage CarryOut ===");
+        info!(stage = "carry out");
         self.stage_carry_out().await;
     }
 }
@@ -324,6 +345,7 @@ impl<'a> Iterator for IterMut<'a> {
             self.sample.cur += absolute_val;
         }
         self.iteration += 1;
+        info!(avg_temperature = self.sample.cur);
         Some(*self.sample)
     }
 }
@@ -338,13 +360,14 @@ pub fn compute_sensor_temperatures(
         .map(|sensor_id| {
             let relative_diff = rand::thread_rng().gen_range(-100.0..100.0);
             let sensor_temperature = average_temperature + relative_diff * 1.0 / 100.0;
+            info!(sensor = sensor_id, temperature = sensor_temperature);
             cumulative_temperature += sensor_temperature;
             (&**sensor_id, sensor_temperature)
         })
         .collect::<Vec<(&'_ str, f32)>>();
-    let last_sensor_id = &sensors[sensors.len() - 1];
-    let last_sensor_temperature =
-        (sensors.len() as f32) * average_temperature - cumulative_temperature;
-    sensor_events.push((last_sensor_id, last_sensor_temperature));
+    let sensor_id = &sensors[sensors.len() - 1];
+    let sensor_temperature = (sensors.len() as f32) * average_temperature - cumulative_temperature;
+    info!(sensor = sensor_id, temperature = sensor_temperature);
+    sensor_events.push((sensor_id, sensor_temperature));
     sensor_events
 }
