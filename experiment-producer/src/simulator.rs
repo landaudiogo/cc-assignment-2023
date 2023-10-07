@@ -3,8 +3,8 @@ use rand::Rng;
 use rdkafka::message::OwnedHeaders;
 use serde::Deserialize;
 use std::time::Duration;
-use tokio::time;
-use tracing::{debug, info, Instrument, Span};
+use tokio::{task::JoinHandle, time};
+use tracing::{info, Instrument};
 use uuid::Uuid;
 
 use crate::config::{ConfigEntry, UncheckedTempRange};
@@ -144,9 +144,9 @@ impl From<ConfigEntry> for ExperimentConfiguration {
             temp_range,
             stabilization_samples,
             carry_out_samples,
-            start_time,
+            start_time: _,
             secret_key,
-            start_temperature,
+            start_temperature: _,
         } = config_entry;
         Self::new(
             researcher,
@@ -224,28 +224,30 @@ impl Experiment {
             &self.config.secret_key,
         );
         for sensor_events in stabilization_events {
-            let mut handles = vec![];
-            for event in sensor_events {
-                let record = RecordData {
-                    payload: event,
-                    key: Some(self.config.experiment_id.clone()),
-                    headers: OwnedHeaders::new().add("record_name", "sensor_temperature_measured"),
-                };
-                let producer = self.producer.clone();
-                let span = Span::current();
-                handles.push(tokio::spawn(
-                    async move {
-                        producer
-                            .send_event(record)
-                            .await
-                            .expect("Failed to produce message");
-                    }
-                    .instrument(span),
-                ));
-            }
+            let handles: Vec<JoinHandle<_>> = sensor_events
+                .0
+                .into_iter()
+                .map(|event| {
+                    let record = RecordData {
+                        payload: event,
+                        key: Some(self.config.experiment_id.clone()),
+                        headers: OwnedHeaders::new()
+                            .add("record_name", "sensor_temperature_measured"),
+                    };
+                    let producer = self.producer.clone();
+                    tokio::spawn(
+                        async move {
+                            producer
+                                .send_event(record)
+                                .await
+                                .expect("Failed to produce message");
+                        }
+                        .instrument(sensor_events.1.clone()),
+                    )
+                })
+                .collect();
             future::join_all(handles).await;
 
-            info!("Temperature Measured Events");
             time::sleep(Duration::from_millis(self.config.sample_rate)).await;
         }
     }
@@ -274,28 +276,30 @@ impl Experiment {
             &self.config.secret_key,
         );
         for sensor_events in carry_out_events {
-            let mut handles = vec![];
-            for event in sensor_events {
-                let record = RecordData {
-                    payload: event,
-                    key: Some(self.config.experiment_id.clone()),
-                    headers: OwnedHeaders::new().add("record_name", "sensor_temperature_measured"),
-                };
-                let producer = self.producer.clone();
-                let span = Span::current();
-                handles.push(tokio::spawn(
-                    async move {
-                        producer
-                            .send_event(record)
-                            .await
-                            .expect("Failed to produce message");
-                    }
-                    .instrument(span),
-                ));
-            }
-
+            let handles: Vec<JoinHandle<_>> = sensor_events
+                .0
+                .into_iter()
+                .map(|event| {
+                    let record = RecordData {
+                        payload: event,
+                        key: Some(self.config.experiment_id.clone()),
+                        headers: OwnedHeaders::new()
+                            .add("record_name", "sensor_temperature_measured"),
+                    };
+                    let producer = self.producer.clone();
+                    tokio::spawn(
+                        async move {
+                            producer
+                                .send_event(record)
+                                .await
+                                .expect("Failed to produce message");
+                        }
+                        .instrument(sensor_events.1.clone()),
+                    )
+                })
+                .collect();
             future::join_all(handles).await;
-            debug!("Temperature Measured Events");
+
             time::sleep(Duration::from_millis(self.config.sample_rate)).await;
         }
 

@@ -1,10 +1,10 @@
+use ::time::{format_description, UtcOffset};
 use clap::{command, value_parser, Arg, ArgAction, ArgMatches};
 use futures::future;
 use tokio::time::{self as tktime, Duration};
 use tracing::{span, Instrument, Level};
-use tracing_subscriber::{prelude::*, filter::LevelFilter, fmt::time::OffsetTime};
 use tracing_appender::non_blocking::WorkerGuard;
-use ::time::{format_description, UtcOffset};
+use tracing_subscriber::{filter::LevelFilter, fmt::time::OffsetTime, prelude::*};
 
 mod config;
 mod events;
@@ -54,8 +54,13 @@ async fn run_single_experiment(mut matches: ArgMatches) {
         .remove_one::<f32>("start-temperature")
         .expect("required");
 
+    let span = span!(
+        Level::INFO,
+        "experiment",
+        experiment_id = experiment_config.experiment_id
+    );
     let mut experiment = Experiment::new(start_temperature, experiment_config, topic_producer);
-    experiment.run().await;
+    experiment.run().instrument(span).await;
 }
 
 async fn run_multiple_experiments(mut matches: ArgMatches, config_file: &str) {
@@ -65,11 +70,6 @@ async fn run_multiple_experiments(mut matches: ArgMatches, config_file: &str) {
             .expect("required"),
         &matches.remove_one::<String>("topic").expect("required"),
     );
-
-    // For some reason this is required so the first level 
-    // span is printed to stdout. This happens because of the 
-    // call to KafkaTopicProducer::new()
-    span!(Level::INFO, "");
 
     let config = ConfigFile::from_file(config_file);
     let mut handles = vec![];
@@ -113,20 +113,22 @@ fn configure_tracing() -> WorkerGuard {
     let file_appender = tracing_appender::rolling::daily("./", "producer.log");
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
 
-    layers.push(tracing_subscriber::fmt::layer()
-        .with_target(true)
-        .with_writer(non_blocking)
-        .with_timer(timer.clone())
-        .json()
-        .with_filter(LevelFilter::DEBUG)
-        .boxed()
+    layers.push(
+        tracing_subscriber::fmt::layer()
+            .with_target(true)
+            .with_writer(non_blocking)
+            .with_timer(timer.clone())
+            .json()
+            .with_filter(LevelFilter::DEBUG)
+            .boxed(),
     );
 
-    layers.push(tracing_subscriber::fmt::layer()
-        .with_target(true)
-        .with_timer(timer)
-        .with_filter(LevelFilter::INFO)
-        .boxed()
+    layers.push(
+        tracing_subscriber::fmt::layer()
+            .with_target(true)
+            .with_timer(timer)
+            .with_filter(LevelFilter::INFO)
+            .boxed(),
     );
 
     tracing_subscriber::registry().with(layers).init();

@@ -7,7 +7,7 @@ use rdkafka::{
     producer::{FutureProducer, FutureRecord},
 };
 use std::{fs, time::Duration};
-use tracing::{debug, info};
+use tracing::{debug, info, span, Level, Span};
 use uuid::Uuid;
 
 use event_hash::{HashData, NotificationType};
@@ -182,11 +182,13 @@ pub fn temperature_events<'a>(
     sensors: &'a Vec<String>,
     stage: &'a ExperimentStage,
     secret_key: &'a str,
-) -> Box<dyn Iterator<Item = Vec<EventWrapper>> + 'a + Send> {
+) -> Box<dyn Iterator<Item = (Vec<EventWrapper>, Span)> + 'a + Send> {
     let mut prev_sample = None;
 
     Box::new(sample_iter.map(move |sample| {
         let measurement_id = &format!("{}", Uuid::new_v4());
+        let span = span!(tracing::Level::INFO, "measurement", measurement_id);
+        let _enter = span.enter();
         let current_time = time::current_epoch();
 
         let hash_data = HashData {
@@ -199,7 +201,7 @@ pub fn temperature_events<'a>(
         let measurement_hash = hash_data.encrypt(secret_key.as_bytes());
         prev_sample = Some(sample);
 
-        simulator::compute_sensor_temperatures(&sensors, sample.cur())
+        let sensor_events = simulator::compute_sensor_temperatures(&sensors, sample.cur())
             .into_iter()
             .map(|(sensor_id, sensor_temperature)| {
                 temperature_measured_event(
@@ -211,7 +213,9 @@ pub fn temperature_events<'a>(
                     &measurement_hash,
                 )
             })
-            .collect()
+            .collect();
+        drop(_enter);
+        return (sensor_events, span);
     }))
 }
 
@@ -241,6 +245,12 @@ impl KafkaTopicProducer {
             .set("ssl.keystore.password", "cc2023")
             .create()
             .expect("Producer creation error");
+
+        // For some reason this is required so the first level
+        // span is printed to stdout. This happens because of the
+        // call to ClientConfig::new()
+        span!(Level::INFO, "");
+
         KafkaTopicProducer {
             topic: topic.into(),
             producer,
@@ -261,7 +271,7 @@ impl KafkaTopicProducer {
 
         let reader = Reader::new(record.payload.to_bytes()).unwrap();
         for _value in reader {
-            debug!("{:?}", _value.unwrap());
+            debug!(record = format!("{:?}", _value.unwrap()));
         }
 
         if record.key.is_some() {
