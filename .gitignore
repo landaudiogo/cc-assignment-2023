@@ -1,3 +1,4 @@
 target/
 ca.key
 .env
+*.log*

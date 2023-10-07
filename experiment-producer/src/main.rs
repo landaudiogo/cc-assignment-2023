@@ -110,7 +110,7 @@ fn configure_tracing() -> WorkerGuard {
     .expect("format string should be valid");
     let timer = OffsetTime::new(offset, time_format);
 
-    let file_appender = tracing_appender::rolling::daily("./", "producer.log");
+    let file_appender = tracing_appender::rolling::daily("./", "producer.json.log");
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
 
     layers.push(
