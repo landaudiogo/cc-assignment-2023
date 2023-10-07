@@ -2,7 +2,9 @@ use clap::{command, value_parser, Arg, ArgAction, ArgMatches};
 use futures::future;
 use tokio::time::{self as tktime, Duration};
 use tracing::{span, Instrument, Level};
-use tracing_subscriber;
+use tracing_subscriber::{prelude::*, filter::LevelFilter, fmt::time::OffsetTime};
+use tracing_appender::non_blocking::WorkerGuard;
+use ::time::{format_description, UtcOffset};
 
 mod config;
 mod events;
@@ -64,8 +66,12 @@ async fn run_multiple_experiments(mut matches: ArgMatches, config_file: &str) {
         &matches.remove_one::<String>("topic").expect("required"),
     );
 
+    // For some reason this is required so the first level 
+    // span is printed to stdout. This happens because of the 
+    // call to KafkaTopicProducer::new()
+    span!(Level::INFO, "");
+
     let config = ConfigFile::from_file(config_file);
-    let start_time = time::current_epoch();
     let mut handles = vec![];
 
     for mut entry in config.0 {
@@ -83,8 +89,6 @@ async fn run_multiple_experiments(mut matches: ArgMatches, config_file: &str) {
         handles.push(tokio::spawn(
             async move {
                 tktime::sleep(Duration::from_millis(start_offset * 1000)).await;
-                let current_time = time::current_epoch();
-                println!("{} {}", current_time - start_time, start_offset);
 
                 let mut experiment =
                     Experiment::new(start_temperature, experiment_config, topic_producer);
@@ -96,13 +100,41 @@ async fn run_multiple_experiments(mut matches: ArgMatches, config_file: &str) {
     future::join_all(handles).await;
 }
 
-#[tokio::main]
-async fn main() {
-    tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::INFO)
-        .init();
+fn configure_tracing() -> WorkerGuard {
+    let mut layers = vec![];
 
-    let mut matches = command!() // requires `cargo` feature
+    let offset = UtcOffset::from_hms(2, 0, 0).expect("Should get CET offset");
+    let time_format = format_description::parse(
+        "[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:6][offset_hour sign:mandatory]",
+    )
+    .expect("format string should be valid");
+    let timer = OffsetTime::new(offset, time_format);
+
+    let file_appender = tracing_appender::rolling::daily("./", "producer.log");
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+
+    layers.push(tracing_subscriber::fmt::layer()
+        .with_target(true)
+        .with_writer(non_blocking)
+        .with_timer(timer.clone())
+        .json()
+        .with_filter(LevelFilter::DEBUG)
+        .boxed()
+    );
+
+    layers.push(tracing_subscriber::fmt::layer()
+        .with_target(true)
+        .with_timer(timer)
+        .with_filter(LevelFilter::INFO)
+        .boxed()
+    );
+
+    tracing_subscriber::registry().with(layers).init();
+    _guard
+}
+
+fn configure_cli() -> ArgMatches {
+    command!() // requires `cargo` feature
         .next_line_help(true)
         .arg(Arg::new("secret-key")
             .required(false)
@@ -178,7 +210,13 @@ async fn main() {
             .action(ArgAction::Set)
             .value_parser(value_parser!(f32))
         )
-        .get_matches();
+        .get_matches()
+}
+
+#[tokio::main]
+async fn main() {
+    let _guard = configure_tracing();
+    let mut matches = configure_cli();
 
     if let Some(config_file) = matches.remove_one::<String>("config-file") {
         run_multiple_experiments(matches, &config_file).await;
