@@ -224,7 +224,11 @@ impl Experiment {
             &self.config.secret_key,
         );
         for sensor_events in stabilization_events {
-            let handles: Vec<JoinHandle<_>> = sensor_events
+            let sample_rate = self.config.sample_rate;
+            let sleep_handle = tokio::spawn(async move {
+                time::sleep(Duration::from_millis(sample_rate)).await;
+            });
+            let mut handles: Vec<JoinHandle<_>> = sensor_events
                 .0
                 .into_iter()
                 .map(|event| {
@@ -246,9 +250,8 @@ impl Experiment {
                     )
                 })
                 .collect();
+            handles.push(sleep_handle);
             future::join_all(handles).await;
-
-            time::sleep(Duration::from_millis(self.config.sample_rate)).await;
         }
     }
 
@@ -276,7 +279,11 @@ impl Experiment {
             &self.config.secret_key,
         );
         for sensor_events in carry_out_events {
-            let handles: Vec<JoinHandle<_>> = sensor_events
+            let sample_rate = self.config.sample_rate;
+            let sleep_handle = tokio::spawn(async move {
+                time::sleep(Duration::from_millis(sample_rate)).await;
+            });
+            let mut handles: Vec<JoinHandle<_>> = sensor_events
                 .0
                 .into_iter()
                 .map(|event| {
@@ -298,9 +305,8 @@ impl Experiment {
                     )
                 })
                 .collect();
+            handles.push(sleep_handle);
             future::join_all(handles).await;
-
-            time::sleep(Duration::from_millis(self.config.sample_rate)).await;
         }
 
         self.stage = ExperimentStage::Terminated;
