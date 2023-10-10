@@ -7,7 +7,7 @@
             "name": "experiment"
         },
         {
-            "name": "samples", 
+            "name": "measurements", 
             "type": {
                 "type": "array",
                 "items": {

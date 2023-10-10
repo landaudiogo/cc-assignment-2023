@@ -136,7 +136,7 @@ pub fn experiment_document_event(
             })
             .collect(),
     );
-    record.put("samples", measurements);
+    record.put("measurements", measurements);
 
     let mut record_temp_range = Record::new(&temp_schema).unwrap();
     record_temp_range.put("upper_threshold", Value::Float(temp_range.upper_threshold));
