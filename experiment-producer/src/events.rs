@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use event_hash::{HashData, NotificationType};
 
-use crate::simulator::{self, ExperimentStage, IterMut, TempRange, TemperatureSample};
+use crate::simulator::{self, ExperimentStage, IterMut, Measurement, TempRange, TemperatureSample};
 use crate::time;
 
 /// `Vec<u8>` wrapper
@@ -105,6 +105,48 @@ pub fn experiment_terminated_event(experiment_id: &str) -> EventWrapper {
     EventWrapper(writer.into_inner().unwrap())
 }
 
+pub fn experiment_document_event(
+    experiment_id: &str,
+    measurements: &Vec<Measurement>,
+    temp_range: TempRange,
+) -> EventWrapper {
+    let raw_schema =
+        fs::read_to_string("experiment-producer/schemas/experiment_document.avsc").unwrap();
+    let schema = Schema::parse_str(&raw_schema).unwrap();
+    let mut writer = Writer::new(&schema, Vec::new());
+
+    let schema_json: serde_json::Value = serde_json::from_str(&raw_schema).unwrap();
+    let measurement_schema = &schema_json["fields"][1]["type"]["items"];
+    let measurement_schema =
+        Schema::parse_str(&measurement_schema.to_string()).expect("Valid measurement avro schema");
+    let temp_schema = &schema_json["fields"][2]["type"];
+    let temp_schema = Schema::parse_str(&temp_schema.to_string()).unwrap();
+
+    let mut record = Record::new(writer.schema()).unwrap();
+    record.put("experiment", experiment_id);
+    let measurements = Value::Array(
+        measurements
+            .into_iter()
+            .map(|measurement| {
+                let mut record =
+                    Record::new(&measurement_schema).expect("Valid measurement schema");
+                record.put("timestamp", Value::Double(measurement.timestamp));
+                record.put("temperature", Value::Float(measurement.temperature));
+                record.into()
+            })
+            .collect(),
+    );
+    record.put("samples", measurements);
+
+    let mut record_temp_range = Record::new(&temp_schema).unwrap();
+    record_temp_range.put("upper_threshold", Value::Float(temp_range.upper_threshold));
+    record_temp_range.put("lower_threshold", Value::Float(temp_range.lower_threshold));
+    record.put("temperature_range", record_temp_range);
+
+    writer.append(record).unwrap();
+    EventWrapper(writer.into_inner().unwrap())
+}
+
 pub fn temperature_measured_event(
     experiment: &str,
     measurement_id: &str,
@@ -175,14 +217,14 @@ fn compute_notification_type(
 
 // TODO
 // key paramater
-pub fn temperature_events<'a>(
-    sample_iter: IterMut<'a>,
-    experiment_id: &'a str,
-    researcher: &'a str,
-    sensors: &'a Vec<String>,
-    stage: &'a ExperimentStage,
-    secret_key: &'a str,
-) -> Box<dyn Iterator<Item = (Vec<EventWrapper>, Span)> + 'a + Send> {
+pub fn temperature_events<'b>(
+    sample_iter: IterMut<'b>,
+    experiment_id: &'b str,
+    researcher: &'b str,
+    sensors: &'b Vec<String>,
+    stage: &'b ExperimentStage,
+    secret_key: &'b str,
+) -> Box<dyn Iterator<Item = (Vec<EventWrapper>, Span, Measurement)> + 'b + Send> {
     let mut prev_sample = None;
 
     Box::new(sample_iter.map(move |sample| {
@@ -190,6 +232,10 @@ pub fn temperature_events<'a>(
         let span = span!(tracing::Level::INFO, "measurement", measurement_id);
         let _enter = span.enter();
         let current_time = time::current_epoch();
+        let measurement = Measurement {
+            temperature: sample.cur(),
+            timestamp: current_time,
+        };
 
         let hash_data = HashData {
             notification_type: compute_notification_type(sample, prev_sample, &stage),
@@ -215,7 +261,7 @@ pub fn temperature_events<'a>(
             })
             .collect();
         drop(_enter);
-        return (sensor_events, span);
+        return (sensor_events, span, measurement);
     }))
 }
 
@@ -227,12 +273,11 @@ pub struct RecordData<K: ToBytes, T: ToBytes> {
 
 #[derive(Clone)]
 pub struct KafkaTopicProducer {
-    topic: String,
     producer: FutureProducer, // partition: Option<usize>
 }
 
 impl KafkaTopicProducer {
-    pub fn new(brokers: &str, topic: &str) -> Self {
+    pub fn new(brokers: &str) -> Self {
         let producer: FutureProducer = ClientConfig::new()
             .set("bootstrap.servers", brokers)
             .set("message.timeout.ms", "5000")
@@ -251,27 +296,29 @@ impl KafkaTopicProducer {
         // call to ClientConfig::new()
         span!(Level::INFO, "");
 
-        KafkaTopicProducer {
-            topic: topic.into(),
-            producer,
-        }
+        KafkaTopicProducer { producer }
     }
 
     pub async fn send_event<'a, K, T>(
         &self,
         record: RecordData<K, T>,
+        topic: &str,
     ) -> Result<(i32, i64), (KafkaError, OwnedMessage)>
     where
         T: ToBytes,
-        K: ToBytes,
+        K: ToBytes + std::fmt::Debug,
     {
-        let mut future_record: FutureRecord<'_, K, T> = FutureRecord::to(&self.topic)
+        let mut future_record: FutureRecord<'_, K, T> = FutureRecord::to(topic)
             .payload(&record.payload)
             .headers(record.headers);
 
         let reader = Reader::new(record.payload.to_bytes()).unwrap();
-        for _value in reader {
-            debug!(record = format!("{:?}", _value.unwrap()));
+        for value in reader {
+            debug!(
+                topic,
+                key = format!("{:?}", record.key),
+                record = format!("{:?}", value.unwrap())
+            );
         }
 
         if record.key.is_some() {

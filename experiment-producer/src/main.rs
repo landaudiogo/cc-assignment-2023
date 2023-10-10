@@ -20,7 +20,6 @@ async fn run_single_experiment(mut matches: ArgMatches) {
         &matches
             .remove_one::<String>("broker-list")
             .expect("required"),
-        &matches.remove_one::<String>("topic").expect("required"),
     );
 
     let experiment_config = ExperimentConfiguration::new(
@@ -48,6 +47,8 @@ async fn run_single_experiment(mut matches: ArgMatches) {
         matches
             .remove_one::<String>("secret-key")
             .expect("required"),
+        matches.remove_one::<String>("topic").expect("required"),
+        matches.remove_one::<String>("topic-document"),
     );
 
     let start_temperature = matches
@@ -68,7 +69,6 @@ async fn run_multiple_experiments(mut matches: ArgMatches, config_file: &str) {
         &matches
             .remove_one::<String>("broker-list")
             .expect("required"),
-        &matches.remove_one::<String>("topic").expect("required"),
     );
 
     let config = ConfigFile::from_file(config_file);
@@ -78,6 +78,12 @@ async fn run_multiple_experiments(mut matches: ArgMatches, config_file: &str) {
         let start_temperature = entry.start_temperature;
         let start_offset = entry.start_time;
         entry.set_secret_key(&matches.get_one::<String>("secret-key").expect("required"));
+        entry.set_topic(&matches.get_one::<String>("topic").expect("required"));
+        entry.set_topic_document(
+            matches
+                .get_one::<String>("topic-document")
+                .map(|topic| topic.as_str()),
+        );
         let experiment_config = ExperimentConfiguration::from(entry);
         let topic_producer = topic_producer.clone();
 
@@ -211,6 +217,11 @@ fn configure_cli() -> ArgMatches {
             .default_value("26.5")
             .action(ArgAction::Set)
             .value_parser(value_parser!(f32))
+        )
+        .arg(Arg::new("topic-document")
+            .required(false)
+            .action(ArgAction::Set)
+            .long("topic-document")
         )
         .get_matches()
 }

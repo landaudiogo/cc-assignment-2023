@@ -107,6 +107,8 @@ pub struct ExperimentConfiguration {
     stabilization_samples: u16,
     carry_out_samples: u16,
     secret_key: String,
+    topic: String,
+    topic_document: Option<String>,
 }
 
 impl ExperimentConfiguration {
@@ -118,6 +120,8 @@ impl ExperimentConfiguration {
         stabilization_samples: u16,
         carry_out_samples: u16,
         secret_key: String,
+        topic: String,
+        topic_document: Option<String>,
     ) -> Self {
         let sensors: Vec<_> = (0..num_sensors)
             .map(|_| format!("{}", Uuid::new_v4()))
@@ -131,6 +135,8 @@ impl ExperimentConfiguration {
             stabilization_samples,
             carry_out_samples,
             secret_key,
+            topic,
+            topic_document,
         }
     }
 }
@@ -147,6 +153,8 @@ impl From<ConfigEntry> for ExperimentConfiguration {
             start_time: _,
             secret_key,
             start_temperature: _,
+            topic,
+            topic_document,
         } = config_entry;
         Self::new(
             researcher,
@@ -156,12 +164,15 @@ impl From<ConfigEntry> for ExperimentConfiguration {
             stabilization_samples,
             carry_out_samples,
             secret_key,
+            topic,
+            topic_document,
         )
     }
 }
 
 pub struct Experiment {
     sample: TemperatureSample,
+    measurements: Vec<Measurement>,
     stage: ExperimentStage,
     config: ExperimentConfiguration,
     producer: KafkaTopicProducer,
@@ -175,6 +186,7 @@ impl Experiment {
         };
         Experiment {
             stage: ExperimentStage::Uninitialized,
+            measurements: Vec::new(),
             sample,
             producer,
             config,
@@ -194,7 +206,7 @@ impl Experiment {
             headers: OwnedHeaders::new().add("record_name", "experiment_configured"),
         };
         self.producer
-            .send_event(record)
+            .send_event(record, &self.config.topic)
             .await
             .expect("Failed to produce message");
     }
@@ -207,7 +219,7 @@ impl Experiment {
             headers: OwnedHeaders::new().add("record_name", "stabilization_started"),
         };
         self.producer
-            .send_event(record)
+            .send_event(record, &self.config.topic)
             .await
             .expect("Failed to produce message");
 
@@ -225,6 +237,7 @@ impl Experiment {
         );
         for sensor_events in stabilization_events {
             let sample_rate = self.config.sample_rate;
+            self.measurements.push(sensor_events.2);
             let sleep_handle = tokio::spawn(async move {
                 time::sleep(Duration::from_millis(sample_rate)).await;
             });
@@ -239,10 +252,11 @@ impl Experiment {
                             .add("record_name", "sensor_temperature_measured"),
                     };
                     let producer = self.producer.clone();
+                    let topic = self.config.topic.clone();
                     tokio::spawn(
                         async move {
                             producer
-                                .send_event(record)
+                                .send_event(record, &topic)
                                 .await
                                 .expect("Failed to produce message");
                         }
@@ -263,7 +277,7 @@ impl Experiment {
             headers: OwnedHeaders::new().add("record_name", "experiment_started"),
         };
         self.producer
-            .send_event(record)
+            .send_event(record, &self.config.topic)
             .await
             .expect("Failed to produce message");
 
@@ -283,6 +297,7 @@ impl Experiment {
             let sleep_handle = tokio::spawn(async move {
                 time::sleep(Duration::from_millis(sample_rate)).await;
             });
+            self.measurements.push(sensor_events.2);
             let mut handles: Vec<JoinHandle<_>> = sensor_events
                 .0
                 .into_iter()
@@ -294,10 +309,11 @@ impl Experiment {
                             .add("record_name", "sensor_temperature_measured"),
                     };
                     let producer = self.producer.clone();
+                    let topic = self.config.topic.clone();
                     tokio::spawn(
                         async move {
                             producer
-                                .send_event(record)
+                                .send_event(record, &topic)
                                 .await
                                 .expect("Failed to produce message");
                         }
@@ -316,9 +332,25 @@ impl Experiment {
             headers: OwnedHeaders::new().add("record_name", "experiment_terminated"),
         };
         self.producer
-            .send_event(record)
+            .send_event(record, &self.config.topic)
             .await
             .expect("Failed to produce message");
+
+        if let Some(topic_document) = &self.config.topic_document {
+            let record = RecordData {
+                payload: events::experiment_document_event(
+                    &self.config.experiment_id,
+                    &self.measurements,
+                    self.config.temp_range,
+                ),
+                headers: OwnedHeaders::new(),
+                key: Some(&self.config.experiment_id),
+            };
+            self.producer
+                .send_event(record, &topic_document)
+                .await
+                .expect("Failed to produce message");
+        }
     }
 
     pub async fn run(&mut self) {
@@ -330,6 +362,12 @@ impl Experiment {
         info!(stage = "carry out");
         self.stage_carry_out().await;
     }
+}
+
+#[derive(Debug)]
+pub struct Measurement {
+    pub timestamp: f64,
+    pub temperature: f32,
 }
 
 pub struct IterMut<'a> {

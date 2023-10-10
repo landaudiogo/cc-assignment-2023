@@ -45,6 +45,12 @@ pub struct ConfigEntry {
 
     #[serde(skip)]
     pub secret_key: String,
+
+    #[serde(skip)]
+    pub topic: String,
+
+    #[serde(skip)]
+    pub topic_document: Option<String>,
 }
 
 impl ConfigEntry {
@@ -74,5 +80,13 @@ impl ConfigEntry {
 
     pub fn set_secret_key(&mut self, secret_key: &str) {
         self.secret_key = secret_key.into();
+    }
+
+    pub fn set_topic(&mut self, topic: &str) {
+        self.topic = topic.into();
+    }
+
+    pub fn set_topic_document(&mut self, topic_document: Option<&str>) {
+        self.topic_document = topic_document.map(|topic| topic.into());
     }
 }

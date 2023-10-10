@@ -2,3 +2,4 @@ target/
 ca.key
 .env*
 *.log*
+experiment-producer/auth/
