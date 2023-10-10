@@ -1036,7 +1036,11 @@ dependencies = [
 name = "http-load-generator"
 version = "0.1.0"
 dependencies = [
+ "apache-avro",
+ "clap",
+ "rdkafka",
  "reqwest",
+ "serde",
  "tokio",
 ]
 
