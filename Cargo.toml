@@ -6,4 +6,5 @@ members = [
     "notifications-service", 
     "experiment-producer",
     "event-hash",
+    "http-load-generator",
 ]
