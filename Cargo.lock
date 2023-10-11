@@ -175,6 +175,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-broadcast"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c48ccdbf6ca6b121e0f586cbc0e73ae440e56c67c30fa0873b4e110d9c26d2b"
+dependencies = [
+ "event-listener",
+ "futures-core",
+]
+
+[[package]]
 name = "async-trait"
 version = "0.1.73"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1037,7 +1047,10 @@ name = "http-load-generator"
 version = "0.1.0"
 dependencies = [
  "apache-avro",
+ "async-broadcast",
  "clap",
+ "futures",
+ "rand",
  "rdkafka",
  "reqwest",
  "serde",

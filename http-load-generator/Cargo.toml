@@ -12,3 +12,6 @@ rdkafka = { version = "0.25", features = ["cmake-build", "ssl"] }
 clap = { version = "4", features = ["derive", "cargo"]}
 apache-avro = "0.15"
 serde = { version = "1.0.183", features = ["derive"]}
+futures = "0.3.28"
+rand = "0.8.5"
+async-broadcast = "0.5.1"
