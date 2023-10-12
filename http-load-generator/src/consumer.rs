@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use apache_avro::{from_value, Reader};
 use rdkafka::{
     client::ClientContext,
@@ -23,25 +24,25 @@ impl ConsumerContext for CustomContext {
 }
 
 #[derive(Debug, Deserialize, Clone)]
-struct Measurement {
-    timestamp: f64,
-    temperature: f32,
+pub struct Measurement {
+    pub timestamp: f64,
+    pub temperature: f32,
 }
 
 #[derive(Debug, Deserialize, Clone)]
-struct TempRange {
-    upper_threshold: f32,
-    lower_threshold: f32,
+pub struct TempRange {
+    pub upper_threshold: f32,
+    pub lower_threshold: f32,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct ExperimentDocument {
     pub experiment: String,
-    measurements: Vec<Measurement>,
-    temperature_range: TempRange,
+    pub measurements: Vec<Measurement>,
+    pub temperature_range: TempRange,
 }
 
-async fn read_loop<T>(consumer: StreamConsumer<T>, tx: Sender<ExperimentDocument>)
+async fn read_loop<T>(consumer: StreamConsumer<T>, tx: Sender<Arc<ExperimentDocument>>)
 where
     T: ConsumerContext + ClientContext + 'static,
 {
@@ -58,7 +59,7 @@ where
                     tokio::spawn(async move {
                         // TODO: Parameterized sleep
                         time::sleep(Duration::from_millis(5 * 1000)).await;
-                        tx.send(experiment_document)
+                        tx.send(Arc::new(experiment_document))
                             .await
                             .expect("Receiver available");
                     });
@@ -69,7 +70,7 @@ where
     }
 }
 
-pub async fn start(brokers: &str, group_id: &str, topics: &[&str], tx: Sender<ExperimentDocument>) {
+pub async fn start(brokers: &str, group_id: &str, topics: &[&str], tx: Sender<Arc<ExperimentDocument>>) {
     let context = CustomContext;
 
     let consumer: StreamConsumer<CustomContext> = ClientConfig::new()
