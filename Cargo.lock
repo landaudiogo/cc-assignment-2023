@@ -3,6 +3,16 @@
 version = 3
 
 [[package]]
+name = "Inflector"
+version = "0.11.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe438c63458706e03479442743baae6c88256498e6431708f6dfc520a26515d3"
+dependencies = [
+ "lazy_static",
+ "regex",
+]
+
+[[package]]
 name = "addr2line"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -521,12 +531,36 @@ dependencies = [
 
 [[package]]
 name = "darling"
+version = "0.13.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a01d95850c592940db9b8194bc39f4bc0e89dee5c4265e4b1807c34a9aba453c"
+dependencies = [
+ "darling_core 0.13.4",
+ "darling_macro 0.13.4",
+]
+
+[[package]]
+name = "darling"
 version = "0.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0209d94da627ab5605dcccf08bb18afa5009cfbef48d8a8b7d7bdbc79be25c5e"
 dependencies = [
- "darling_core",
- "darling_macro",
+ "darling_core 0.20.3",
+ "darling_macro 0.20.3",
+]
+
+[[package]]
+name = "darling_core"
+version = "0.13.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "859d65a907b6852c9361e3185c862aae7fafd2887876799fa55f5f99dc40d610"
+dependencies = [
+ "fnv",
+ "ident_case",
+ "proc-macro2",
+ "quote",
+ "strsim",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -545,13 +579,37 @@ dependencies = [
 
 [[package]]
 name = "darling_macro"
+version = "0.13.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9c972679f83bdf9c42bd905396b6c3588a843a17f0f16dfcfa3e2c5d57441835"
+dependencies = [
+ "darling_core 0.13.4",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "darling_macro"
 version = "0.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "836a9bbc7ad63342d6d6e7b815ccab164bc77a2d95d84bc3117a8c0d5c98e2d5"
 dependencies = [
- "darling_core",
+ "darling_core 0.20.3",
  "quote",
  "syn 2.0.28",
+]
+
+[[package]]
+name = "dashmap"
+version = "5.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "978747c1d849a7d2ee5e8adc0159961c48fb7e5db2f06af6723b80123bb53856"
+dependencies = [
+ "cfg-if",
+ "hashbrown 0.14.0",
+ "lock_api",
+ "once_cell",
+ "parking_lot_core",
 ]
 
 [[package]]
@@ -1054,6 +1112,7 @@ dependencies = [
  "rdkafka",
  "reqwest",
  "serde",
+ "serde_json",
  "tokio",
 ]
 
@@ -1431,7 +1490,7 @@ dependencies = [
  "generic-array",
  "jsonwebtoken",
  "poem",
- "poem-openapi",
+ "poem-openapi 3.0.2",
  "rand",
  "serde",
  "serde_json",
@@ -1785,6 +1844,28 @@ dependencies = [
 
 [[package]]
 name = "poem-openapi"
+version = "1.3.24"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "234d06e44e67006381bf9b9094ad0feeac3d2fea5d515bac9f59a21817c5150a"
+dependencies = [
+ "base64 0.13.1",
+ "bytes 1.4.0",
+ "derive_more",
+ "futures-util",
+ "mime",
+ "num-traits",
+ "poem",
+ "poem-openapi-derive 1.3.24",
+ "regex",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
+name = "poem-openapi"
 version = "3.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "45c94040f60162ae6220ae0650062d9f29079a282f943615e74645c06273e9dd"
@@ -1796,7 +1877,7 @@ dependencies = [
  "mime",
  "num-traits",
  "poem",
- "poem-openapi-derive",
+ "poem-openapi-derive 3.0.2",
  "quick-xml",
  "regex",
  "serde",
@@ -1809,11 +1890,30 @@ dependencies = [
 
 [[package]]
 name = "poem-openapi-derive"
+version = "1.3.24"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "266910362564aade035a0b871c23e283c2a28fba74e7e7d10f2f0dffe0453a14"
+dependencies = [
+ "Inflector",
+ "darling 0.13.4",
+ "http",
+ "indexmap 1.9.3",
+ "mime",
+ "proc-macro-crate",
+ "proc-macro2",
+ "quote",
+ "regex",
+ "syn 1.0.109",
+ "thiserror",
+]
+
+[[package]]
+name = "poem-openapi-derive"
 version = "3.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "63ade7955e8adf306f91851ea6d475a7c2d9114e1da9032eef36b05de0b8a704"
 dependencies = [
- "darling",
+ "darling 0.20.3",
  "http",
  "indexmap 2.0.0",
  "mime",
@@ -2197,9 +2297,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.104"
+version = "1.0.107"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "076066c5f1078eac5b722a31827a8832fe108bed65dfa75e233c89f8206e976c"
+checksum = "6b420ce6e3d8bd882e9b243c6eed35dbc9a6110c9769e74b584e0d68d1f20c65"
 dependencies = [
  "itoa",
  "ryu",
@@ -2667,6 +2767,22 @@ dependencies = [
  "redox_syscall",
  "rustix",
  "windows-sys",
+]
+
+[[package]]
+name = "test-to-api"
+version = "0.1.0"
+dependencies = [
+ "apache-avro",
+ "clap",
+ "dashmap",
+ "futures",
+ "poem",
+ "poem-openapi 1.3.24",
+ "rdkafka",
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

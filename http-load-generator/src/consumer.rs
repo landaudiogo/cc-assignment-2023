@@ -1,7 +1,3 @@
-use std::{
-    sync::Arc, 
-    cmp::Ordering,
-};
 use apache_avro::{from_value, Reader};
 use rdkafka::{
     client::ClientContext,
@@ -11,6 +7,7 @@ use rdkafka::{
     message::Message,
 };
 use serde::Deserialize;
+use std::{cmp::Ordering, sync::Arc};
 use tokio::{
     sync::mpsc::Sender,
     time::{self, Duration},
@@ -44,7 +41,6 @@ impl PartialOrd for Measurement {
     }
 }
 
-
 #[derive(Debug, Deserialize, Clone)]
 pub struct TempRange {
     pub upper_threshold: f32,
@@ -60,9 +56,9 @@ pub struct ExperimentDocument {
 
 impl ExperimentDocument {
     fn get_measurement_index_le(&self, timestamp: f64) -> Option<usize> {
-        let len = self.measurements.len();  
-        let mut valid_range = [0, len-1];
-        let mut idx = len/2;
+        let len = self.measurements.len();
+        let mut valid_range = [0, len - 1];
+        let mut idx = len / 2;
         loop {
             let curr = &self.measurements[idx];
             match curr.timestamp.partial_cmp(&timestamp).unwrap() {
@@ -70,74 +66,69 @@ impl ExperimentDocument {
                     if valid_range[0] == valid_range[1] {
                         return Some(idx);
                     }
-                    valid_range[0] = valid_range[1] - (valid_range[1]-valid_range[0])/2;
-                }, 
-                Ordering::Equal => { 
-                    return Some(idx); 
-                },
+                    valid_range[0] = valid_range[1] - (valid_range[1] - valid_range[0]) / 2;
+                }
+                Ordering::Equal => {
+                    return Some(idx);
+                }
                 Ordering::Greater => {
                     if valid_range[0] == valid_range[1] {
                         if idx > 0 {
-                            return Some(idx-1)
+                            return Some(idx - 1);
                         } else {
-                            return None
+                            return None;
                         }
                     }
-                    valid_range[1] = valid_range[0] + (valid_range[1]-valid_range[0])/2;
-                },
+                    valid_range[1] = valid_range[0] + (valid_range[1] - valid_range[0]) / 2;
+                }
             }
-            idx = valid_range[0] + (valid_range[1]-valid_range[0])/2;
-        };
+            idx = valid_range[0] + (valid_range[1] - valid_range[0]) / 2;
+        }
     }
 
     fn get_measurement_index_ge(&self, timestamp: f64) -> Option<usize> {
-        let len = self.measurements.len();  
-        let mut valid_range = [0, len-1];
-        let mut idx = len/2;
+        let len = self.measurements.len();
+        let mut valid_range = [0, len - 1];
+        let mut idx = len / 2;
         loop {
             let curr = &self.measurements[idx];
             match curr.timestamp.partial_cmp(&timestamp).unwrap() {
                 Ordering::Less => {
                     if valid_range[0] == valid_range[1] {
-                        if idx == self.measurements.len()-1 {
-                            return None
+                        if idx == self.measurements.len() - 1 {
+                            return None;
                         } else {
-                            return Some(idx+1)
+                            return Some(idx + 1);
                         }
                     }
-                    valid_range[0] = valid_range[1] - (valid_range[1]-valid_range[0])/2;
-                }, 
-                Ordering::Equal => { 
-                    return Some(idx); 
-                },
+                    valid_range[0] = valid_range[1] - (valid_range[1] - valid_range[0]) / 2;
+                }
+                Ordering::Equal => {
+                    return Some(idx);
+                }
                 Ordering::Greater => {
                     if valid_range[0] == valid_range[1] {
-                        return Some(idx)
+                        return Some(idx);
                     }
-                    valid_range[1] = valid_range[0] + (valid_range[1]-valid_range[0])/2;
-                },
+                    valid_range[1] = valid_range[0] + (valid_range[1] - valid_range[0]) / 2;
+                }
             }
-            idx = valid_range[0] + (valid_range[1]-valid_range[0])/2;
-        };
+            idx = valid_range[0] + (valid_range[1] - valid_range[0]) / 2;
+        }
     }
 
     pub fn get_measurements_slice(&self, start_time: f64, end_time: f64) -> Option<&[Measurement]> {
-        let start = self
-            .get_measurement_index_ge(start_time);
-        let end = self
-            .get_measurement_index_le(end_time);
+        let start = self.get_measurement_index_ge(start_time);
+        let end = self.get_measurement_index_le(end_time);
         let (start, end) = match (start, end) {
             (None, _) => return None,
             (_, None) => return None,
-            (_, _) => {
-                (start.unwrap(), end.unwrap())
-            }
+            (_, _) => (start.unwrap(), end.unwrap()),
         };
         if start >= end {
             Some(&self.measurements[start..start])
-        }
-        else {
-            Some(&self.measurements[start..end+1])
+        } else {
+            Some(&self.measurements[start..end + 1])
         }
     }
 }
@@ -173,20 +164,12 @@ where
     }
 }
 
-pub async fn start(brokers: &str, group_id: &str, topics: &[&str], tx: Sender<Arc<ExperimentDocument>>) {
-    let experiment = ExperimentDocument {
-        experiment: "1234".into(), 
-        measurements: vec![
-            Measurement { timestamp: 0.0, temperature: 20.0 },
-            Measurement { timestamp: 2.0, temperature: 20.0 },
-            Measurement { timestamp: 4.0, temperature: 20.0 },
-            Measurement { timestamp: 6.0, temperature: 20.0 },
-            Measurement { timestamp: 8.0, temperature: 20.0 },
-            Measurement { timestamp: 10.0, temperature: 20.0 },
-        ],
-        temperature_range: TempRange { upper_threshold: 25.0, lower_threshold: 15.0 },
-    };
-     
+pub async fn start(
+    brokers: &str,
+    group_id: &str,
+    topics: &[&str],
+    tx: Sender<Arc<ExperimentDocument>>,
+) {
     let context = CustomContext;
 
     let consumer: StreamConsumer<CustomContext> = ClientConfig::new()

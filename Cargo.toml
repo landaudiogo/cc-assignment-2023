@@ -7,4 +7,5 @@ members = [
     "experiment-producer",
     "event-hash",
     "http-load-generator",
+    "test-to-api",
 ]

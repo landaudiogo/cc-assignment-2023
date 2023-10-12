@@ -5,29 +5,28 @@ use tokio::sync::RwLock;
 
 use crate::consumer::ExperimentDocument;
 
-
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum APIQuery {
     OutOfBounds {
         experiment: Arc<ExperimentDocument>,
-    }, 
+    },
     Temperature {
         experiment: Arc<ExperimentDocument>,
         start_time: f64,
         end_time: f64,
-    }
+    },
 }
 
 fn generate_temperature_query(experiment: Arc<ExperimentDocument>) -> APIQuery {
     let mut rng = rand::thread_rng();
     let mut idxs = vec![
-        rng.gen_range(0..experiment.measurements.len()), 
-        rng.gen_range(0..experiment.measurements.len())
+        rng.gen_range(0..experiment.measurements.len()),
+        rng.gen_range(0..experiment.measurements.len()),
     ];
     idxs.sort();
     let start_time = experiment.measurements[idxs[0]].timestamp;
     let end_time = experiment.measurements[idxs[1]].timestamp;
-    APIQuery::Temperature { 
+    APIQuery::Temperature {
         experiment,
         start_time,
         end_time,
@@ -51,7 +50,7 @@ pub async fn generate(
             let experiment = experiments[idx].clone();
             let query_type = rng.gen_range(0..2);
             match query_type {
-                0 => APIQuery::OutOfBounds { experiment }, 
+                0 => APIQuery::OutOfBounds { experiment },
                 1 => generate_temperature_query(experiments[idx].clone()),
                 _ => panic!("There are only 2 query types"),
             }
