@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::{
+    sync::Arc, 
+    cmp::Ordering,
+};
 use apache_avro::{from_value, Reader};
 use rdkafka::{
     client::ClientContext,
@@ -29,6 +32,19 @@ pub struct Measurement {
     pub temperature: f32,
 }
 
+impl PartialEq for Measurement {
+    fn eq(&self, other: &Self) -> bool {
+        self.timestamp == other.timestamp
+    }
+}
+
+impl PartialOrd for Measurement {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.timestamp.partial_cmp(&other.timestamp)
+    }
+}
+
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct TempRange {
     pub upper_threshold: f32,
@@ -42,6 +58,90 @@ pub struct ExperimentDocument {
     pub temperature_range: TempRange,
 }
 
+impl ExperimentDocument {
+    fn get_measurement_index_le(&self, timestamp: f64) -> Option<usize> {
+        let len = self.measurements.len();  
+        let mut valid_range = [0, len-1];
+        let mut idx = len/2;
+        loop {
+            let curr = &self.measurements[idx];
+            match curr.timestamp.partial_cmp(&timestamp).unwrap() {
+                Ordering::Less => {
+                    if valid_range[0] == valid_range[1] {
+                        return Some(idx);
+                    }
+                    valid_range[0] = valid_range[1] - (valid_range[1]-valid_range[0])/2;
+                }, 
+                Ordering::Equal => { 
+                    return Some(idx); 
+                },
+                Ordering::Greater => {
+                    if valid_range[0] == valid_range[1] {
+                        if idx > 0 {
+                            return Some(idx-1)
+                        } else {
+                            return None
+                        }
+                    }
+                    valid_range[1] = valid_range[0] + (valid_range[1]-valid_range[0])/2;
+                },
+            }
+            idx = valid_range[0] + (valid_range[1]-valid_range[0])/2;
+        };
+    }
+
+    fn get_measurement_index_ge(&self, timestamp: f64) -> Option<usize> {
+        let len = self.measurements.len();  
+        let mut valid_range = [0, len-1];
+        let mut idx = len/2;
+        loop {
+            let curr = &self.measurements[idx];
+            match curr.timestamp.partial_cmp(&timestamp).unwrap() {
+                Ordering::Less => {
+                    if valid_range[0] == valid_range[1] {
+                        if idx == self.measurements.len()-1 {
+                            return None
+                        } else {
+                            return Some(idx+1)
+                        }
+                    }
+                    valid_range[0] = valid_range[1] - (valid_range[1]-valid_range[0])/2;
+                }, 
+                Ordering::Equal => { 
+                    return Some(idx); 
+                },
+                Ordering::Greater => {
+                    if valid_range[0] == valid_range[1] {
+                        return Some(idx)
+                    }
+                    valid_range[1] = valid_range[0] + (valid_range[1]-valid_range[0])/2;
+                },
+            }
+            idx = valid_range[0] + (valid_range[1]-valid_range[0])/2;
+        };
+    }
+
+    pub fn get_measurements_slice(&self, start_time: f64, end_time: f64) -> Option<&[Measurement]> {
+        let start = self
+            .get_measurement_index_ge(start_time);
+        let end = self
+            .get_measurement_index_le(end_time);
+        let (start, end) = match (start, end) {
+            (None, _) => return None,
+            (_, None) => return None,
+            (_, _) => {
+                (start.unwrap(), end.unwrap())
+            }
+        };
+        if start >= end {
+            Some(&self.measurements[start..start])
+        }
+        else {
+            Some(&self.measurements[start..end+1])
+        }
+    }
+}
+
 async fn read_loop<T>(consumer: StreamConsumer<T>, tx: Sender<Arc<ExperimentDocument>>)
 where
     T: ConsumerContext + ClientContext + 'static,
@@ -53,8 +153,11 @@ where
                 let m = b.detach();
                 let reader = Reader::new(m.payload().unwrap()).unwrap();
                 for value in reader {
-                    let experiment_document: ExperimentDocument =
+                    let mut experiment_document: ExperimentDocument =
                         from_value(&value.unwrap()).expect("Received invalid event");
+                    experiment_document
+                        .measurements
+                        .sort_by(|a, b| a.partial_cmp(b).unwrap());
                     let tx = tx.clone();
                     tokio::spawn(async move {
                         // TODO: Parameterized sleep
@@ -71,6 +174,19 @@ where
 }
 
 pub async fn start(brokers: &str, group_id: &str, topics: &[&str], tx: Sender<Arc<ExperimentDocument>>) {
+    let experiment = ExperimentDocument {
+        experiment: "1234".into(), 
+        measurements: vec![
+            Measurement { timestamp: 0.0, temperature: 20.0 },
+            Measurement { timestamp: 2.0, temperature: 20.0 },
+            Measurement { timestamp: 4.0, temperature: 20.0 },
+            Measurement { timestamp: 6.0, temperature: 20.0 },
+            Measurement { timestamp: 8.0, temperature: 20.0 },
+            Measurement { timestamp: 10.0, temperature: 20.0 },
+        ],
+        temperature_range: TempRange { upper_threshold: 25.0, lower_threshold: 15.0 },
+    };
+     
     let context = CustomContext;
 
     let consumer: StreamConsumer<CustomContext> = ClientConfig::new()
