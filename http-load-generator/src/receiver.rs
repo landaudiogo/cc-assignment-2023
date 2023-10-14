@@ -12,21 +12,24 @@ use crate::generator::{self, APIQuery};
 use crate::requests;
 
 async fn receive_experiments(
-    experiments: Arc<RwLock<Vec<Arc<ExperimentDocument>>>>,
-    rx: &mut Receiver<Arc<ExperimentDocument>>,
+    experiments: Arc<RwLock<Vec<Arc<RwLock<ExperimentDocument>>>>>,
+    rx: &mut Receiver<ExperimentDocument>,
 ) {
     let mut experiments = experiments.write().await;
     while let Ok(experiment) = rx.try_recv() {
-        experiments.push(experiment);
+        experiments.push(Arc::new(RwLock::new(experiment)));
     }
 }
 
-pub async fn start(mut rx: Receiver<Arc<ExperimentDocument>>) {
+pub async fn start(mut rx: Receiver<ExperimentDocument>) {
     let experiments = Arc::new(RwLock::new(vec![]));
     let (s, r) = broadcast::<Arc<Vec<APIQuery>>>(1000);
 
     let experiment = rx.recv().await.expect("Sender available");
-    experiments.write().await.push(experiment);
+    experiments
+        .write()
+        .await
+        .push(Arc::new(RwLock::new(experiment)));
 
     // Spawn 1 thread per group
     // TODO: Parametrized list of group IP's
@@ -54,7 +57,7 @@ pub async fn start(mut rx: Receiver<Arc<ExperimentDocument>>) {
         }));
         let batch_size = {
             let mut rng = rand::thread_rng();
-            rng.gen_range(100..1000)
+            rng.gen_range(100..200)
         };
         handles.append(
             &mut (0..60)
