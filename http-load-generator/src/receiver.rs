@@ -9,7 +9,7 @@ use tokio::{
 
 use crate::consumer::ExperimentDocument;
 use crate::generator::{self, APIQuery};
-use crate::requests::{Requestor, Host};
+use crate::requests::{Host, Requestor};
 
 async fn receive_experiments(
     experiments: Arc<RwLock<Vec<Arc<RwLock<ExperimentDocument>>>>>,
@@ -34,9 +34,7 @@ pub async fn start(mut rx: Receiver<ExperimentDocument>) {
     // Spawn 1 thread per group
     // TODO: Parametrized list of group IP's
     // TODO: Parametrized start wait
-    let servers = [
-        Host::new("landau", "http://localhost:3000"),
-    ];
+    let servers = [Host::new("landau", "http://localhost:3000")];
     for host in servers {
         let batch_rx = batch_rx.clone();
         let mut requestor = Requestor::new(host, batch_rx);
