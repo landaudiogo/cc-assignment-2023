@@ -1,5 +1,5 @@
 use async_broadcast::Receiver;
-use futures::future;
+use futures::{future, stream, StreamExt};
 use reqwest::Client;
 use std::sync::Arc;
 use tokio::{
@@ -71,38 +71,82 @@ async fn make_temperature_request(
     Ok(())
 }
 
-pub async fn traverse_load(base_url: String, mut r: Receiver<Arc<Vec<APIQuery>>>) {
-    while let Ok(load) = r.recv().await {
-        let client = reqwest::Client::new();
-        let mut handles = vec![];
-        handles.push(tokio::spawn(time::sleep(Duration::from_millis(1000))));
-        for query in load.iter() {
-            let query = query.clone();
-            match query {
-                APIQuery::Temperature {
-                    experiment,
-                    start_time,
-                    end_time,
-                } => {
-                    let client = client.clone();
-                    let base_url = base_url.clone();
-                    handles.push(tokio::spawn(async move {
-                        make_temperature_request(
-                            client, base_url, experiment, start_time, end_time,
-                        )
-                        .await;
-                    }));
-                }
-                APIQuery::OutOfBounds { experiment } => {
-                    let client = client.clone();
-                    let base_url = base_url.clone();
-                    handles.push(tokio::spawn(async move {
-                        make_out_of_bounds_request(client, base_url, experiment).await;
-                    }));
-                }
-            }
+
+pub struct Host {
+    host_name: String, 
+    base_url: String
+}
+
+impl Host {
+    pub fn new(host_name: &str, base_url: &str) -> Self {
+        Self {
+            host_name: host_name.into(), 
+            base_url: base_url.into(),
         }
-        future::join_all(handles).await;
-        println!("Performed {} requests", load.len());
+    }
+}
+
+
+pub struct Requestor {
+    host: Host,
+    batch_rx: Receiver<Arc<Vec<APIQuery>>>,
+    client: Client,
+}
+
+impl Requestor {
+
+    pub fn new(host: Host, batch_rx: Receiver<Arc<Vec<APIQuery>>>) -> Self {
+        Self { host, batch_rx, client: Client::new() }
+    }
+
+    async fn process_batch(&mut self, batch: Arc<Vec<APIQuery>>) {
+        let sleep_handle = tokio::spawn(time::sleep(Duration::from_millis(1000)));
+        let requests = stream::iter(batch.iter())
+            .map(|query| {
+                let query = query.clone();
+                match query {
+                    APIQuery::Temperature {
+                        experiment,
+                        start_time,
+                        end_time,
+                    } => {
+                        let base_url = self.host.base_url.clone();
+                        let client = self.client.clone();
+                        tokio::spawn(async move {
+                            make_temperature_request(
+                                client, base_url, experiment, start_time, end_time,
+                            )
+                            .await;
+                        })
+                    }
+                    APIQuery::OutOfBounds { experiment } => {
+                        let base_url = self.host.base_url.clone();
+                        let client = self.client.clone();
+                        tokio::spawn(async move {
+                            make_out_of_bounds_request(client, base_url, experiment).await;
+                        })
+                    }
+                }
+            })
+            .boxed()
+            .buffer_unordered(50);
+
+        requests
+            .for_each(|response| async move { 
+                match response {
+                    Ok(_) => { }
+                    Err(_) => { println!("join error") }
+                }
+            }).await;
+        sleep_handle.await;
+
+        println!("Performed {} requests", batch.len());
+    }
+
+    pub async fn start(&mut self) {
+        let client = reqwest::Client::new();
+        while let Ok(batch) = self.batch_rx.recv().await {
+            self.process_batch(batch).await;
+        }
     }
 }

@@ -9,7 +9,7 @@ use tokio::{
 
 use crate::consumer::ExperimentDocument;
 use crate::generator::{self, APIQuery};
-use crate::requests;
+use crate::requests::{Requestor, Host};
 
 async fn receive_experiments(
     experiments: Arc<RwLock<Vec<Arc<RwLock<ExperimentDocument>>>>>,
@@ -23,7 +23,7 @@ async fn receive_experiments(
 
 pub async fn start(mut rx: Receiver<ExperimentDocument>) {
     let experiments = Arc::new(RwLock::new(vec![]));
-    let (s, r) = broadcast::<Arc<Vec<APIQuery>>>(1000);
+    let (batch_tx, batch_rx) = broadcast::<Arc<Vec<APIQuery>>>(1000);
 
     let experiment = rx.recv().await.expect("Sender available");
     experiments
@@ -34,13 +34,16 @@ pub async fn start(mut rx: Receiver<ExperimentDocument>) {
     // Spawn 1 thread per group
     // TODO: Parametrized list of group IP's
     // TODO: Parametrized start wait
-    let servers: Vec<String> = vec!["http://localhost:3000".into()];
-    for base_url in servers {
-        let r = r.clone();
-        let base_url = base_url.clone();
+    let servers = [
+        Host::new("landau", "http://localhost:3000"),
+    ];
+    for host in servers {
+        let batch_rx = batch_rx.clone();
+        let mut requestor = Requestor::new(host, batch_rx);
+
         tokio::spawn(async move {
             time::sleep(Duration::from_millis(5000)).await;
-            requests::traverse_load(base_url, r).await;
+            requestor.start().await;
         });
     }
 
@@ -63,9 +66,9 @@ pub async fn start(mut rx: Receiver<ExperimentDocument>) {
             &mut (0..60)
                 .map(|_| {
                     let experiments = experiments.clone();
-                    let s = s.clone();
+                    let batch_tx = batch_tx.clone();
                     tokio::spawn(async move {
-                        generator::generate(experiments.clone(), batch_size, s).await
+                        generator::generate(experiments.clone(), batch_size, batch_tx).await
                     })
                 })
                 .collect(),
