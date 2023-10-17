@@ -2,7 +2,10 @@ use async_broadcast::Receiver;
 use futures::{stream, StreamExt};
 use prometheus_client::metrics::{counter::Counter, family::Family};
 use reqwest::{Client, Error, RequestBuilder, Response};
-use std::sync::Arc;
+use std::{
+    sync::Arc,
+    time::{Duration as stdDuration, Instant},
+};
 use tokio::{
     sync::RwLock,
     time::{self, Duration},
@@ -119,16 +122,21 @@ impl Requestor {
         experiment: Arc<RwLock<ExperimentDocument>>,
         start_time: f64,
         end_time: f64,
-    ) -> Result<(), ResponseError> {
+    ) -> (Result<(), ResponseError>, stdDuration) {
         let request = self
             .prepare_temperature_request(experiment.clone(), start_time, end_time)
             .await;
+        let start = Instant::now();
         let response = tokio::spawn(async move { request.send().await })
             .await
             .expect("Join should not fail");
+        let duration = start.elapsed();
 
-        self.validate_temperature_response(response, experiment, start_time, end_time)
-            .await
+        (
+            self.validate_temperature_response(response, experiment, start_time, end_time)
+                .await,
+            duration,
+        )
     }
 
     async fn prepare_out_of_bounds_request(
@@ -181,14 +189,19 @@ impl Requestor {
     async fn make_out_of_bounds_request(
         &self,
         experiment: Arc<RwLock<ExperimentDocument>>,
-    ) -> Result<(), ResponseError> {
+    ) -> (Result<(), ResponseError>, stdDuration) {
         let request = self.prepare_out_of_bounds_request(experiment.clone()).await;
+        let start = Instant::now();
         let response = tokio::spawn(async move { request.send().await })
             .await
             .expect("Join should not fail");
+        let duration = start.elapsed();
 
-        self.validate_out_of_bounds_response(response, experiment)
-            .await
+        (
+            self.validate_out_of_bounds_response(response, experiment)
+                .await,
+            duration,
+        )
     }
 
     async fn process_batch(&mut self, batch: Arc<Vec<APIQuery>>) {
@@ -212,10 +225,18 @@ impl Requestor {
                                 .get_or_create(&ResponseCountLabels {
                                     host_name: self.host.host_name.clone(),
                                     endpoint: "/temperature".to_string(),
-                                    response_type: ResponseType::from(&res),
+                                    response_type: ResponseType::from(&res.0),
                                 })
                                 .inc();
-                            if let Err(ResponseError::ServerError) = res {
+                            self.metrics
+                                .response_time_histogram
+                                .get_or_create(&ResponseCountLabels {
+                                    host_name: self.host.host_name.clone(),
+                                    endpoint: "/temperature".to_string(),
+                                    response_type: ResponseType::from(&res.0),
+                                })
+                                .observe(res.1.as_millis() as f64/1000.0);
+                            if let Err(ResponseError::ServerError) = res.0 {
                                 continue;
                             } else {
                                 return Some(());
@@ -228,10 +249,18 @@ impl Requestor {
                                 .get_or_create(&ResponseCountLabels {
                                     host_name: self.host.host_name.clone(),
                                     endpoint: "/temperature/out-of-bounds".to_string(),
-                                    response_type: ResponseType::from(&res),
+                                    response_type: ResponseType::from(&res.0),
                                 })
                                 .inc();
-                            if let Err(ResponseError::ServerError) = res {
+                            self.metrics
+                                .response_time_histogram
+                                .get_or_create(&ResponseCountLabels {
+                                    host_name: self.host.host_name.clone(),
+                                    endpoint: "/temperature/out-of-bounds".to_string(),
+                                    response_type: ResponseType::from(&res.0),
+                                })
+                                .observe(res.1.as_millis() as f64/1000.0);
+                            if let Err(ResponseError::ServerError) = res.0 {
                                 continue;
                             } else {
                                 return Some(());
