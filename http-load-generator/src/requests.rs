@@ -238,7 +238,8 @@ impl Requestor {
             .effective_request_rate
             .get_or_create(&RequestRateLabels {
                 host_name: self.host.host_name.clone(),
-            }) .set(value);
+            })
+            .set(value);
     }
 
     async fn process_batch(&mut self, batch: Arc<Vec<APIQuery>>) {
@@ -294,7 +295,7 @@ impl Requestor {
         sleep_handle.await.expect("Should not fail");
         let duration = start.elapsed();
         self.update_gauge_effective(
-            ((batch.len() as f64) / (duration.as_millis() as f64 / 1000.0)).round() as i64
+            ((batch.len() as f64) / (duration.as_millis() as f64 / 1000.0)).round() as i64,
         );
         println!("Performed {} requests", batch.len());
     }

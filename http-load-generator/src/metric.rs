@@ -5,7 +5,7 @@ use actix_web::{
 };
 use prometheus_client::{
     encoding::{text, EncodeLabelSet, EncodeLabelValue},
-    metrics::{counter::Counter, family::Family, histogram::Histogram, gauge::Gauge},
+    metrics::{counter::Counter, family::Family, gauge::Gauge, histogram::Histogram},
     registry::Registry,
 };
 use std::sync::Mutex;
@@ -14,7 +14,7 @@ use crate::requests::ResponseError;
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
 pub struct RequestRateLabels {
-    pub host_name: String
+    pub host_name: String,
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
@@ -55,12 +55,13 @@ pub struct Metrics {
 
 impl Metrics {
     pub fn new() -> Self {
-        let response_time_histogram = Family::<ResponseCountLabels, Histogram>::new_with_constructor(|| {
-            let custom_buckets = [
-               0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
-            ];
-            Histogram::new(custom_buckets.into_iter())
-        });
+        let response_time_histogram =
+            Family::<ResponseCountLabels, Histogram>::new_with_constructor(|| {
+                let custom_buckets = [
+                    0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
+                ];
+                Histogram::new(custom_buckets.into_iter())
+            });
         Self {
             response_count: Family::<ResponseCountLabels, Counter>::default(),
             response_time_histogram,

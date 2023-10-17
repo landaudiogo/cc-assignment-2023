@@ -1,7 +1,7 @@
 use clap::{command, Arg, ArgAction};
 use futures::future;
-use tokio::sync::mpsc;
 use std::process;
+use tokio::sync::mpsc;
 
 mod consumer;
 mod generator;

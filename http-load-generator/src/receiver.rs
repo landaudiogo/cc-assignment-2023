@@ -1,8 +1,6 @@
 use async_broadcast::broadcast;
 use futures::future;
-use prometheus_client::{
-    registry::Registry,
-};
+use prometheus_client::registry::Registry;
 use rand::Rng;
 use std::sync::Arc;
 use tokio::{
@@ -12,9 +10,8 @@ use tokio::{
 
 use crate::consumer::ExperimentDocument;
 use crate::generator::{self, APIQuery};
+use crate::metric::{MetricServer, Metrics};
 use crate::requests::{Host, Requestor};
-use crate::metric::{Metrics, MetricServer};
-
 
 async fn receive_experiments(
     experiments: Arc<RwLock<Vec<Arc<RwLock<ExperimentDocument>>>>>,
