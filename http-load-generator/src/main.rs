@@ -4,6 +4,7 @@ use tokio::sync::mpsc;
 
 mod consumer;
 mod generator;
+mod metric;
 mod receiver;
 mod requests;
 

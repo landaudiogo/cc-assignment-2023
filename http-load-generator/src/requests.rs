@@ -1,5 +1,6 @@
 use async_broadcast::Receiver;
-use futures::{future, stream, StreamExt};
+use futures::{stream, StreamExt};
+use prometheus_client::metrics::{counter::Counter, family::Family};
 use reqwest::{Client, Error, RequestBuilder, Response};
 use std::sync::Arc;
 use tokio::{
@@ -9,9 +10,10 @@ use tokio::{
 
 use crate::consumer::{ExperimentDocument, Measurement};
 use crate::generator::APIQuery;
+use crate::metric::{Labels, ResponseType};
 
 #[derive(Debug)]
-enum ResponseError {
+pub enum ResponseError {
     ServerError,
     BodyDecodingError,
     DeserializationError,
@@ -44,14 +46,20 @@ pub struct Requestor {
     host: Host,
     batch_rx: Receiver<Arc<Vec<APIQuery>>>,
     client: Client,
+    http_requests: Arc<Family<Labels, Counter>>,
 }
 
 impl Requestor {
-    pub fn new(host: Host, batch_rx: Receiver<Arc<Vec<APIQuery>>>) -> Self {
+    pub fn new(
+        host: Host,
+        batch_rx: Receiver<Arc<Vec<APIQuery>>>,
+        http_requests: Arc<Family<Labels, Counter>>,
+    ) -> Self {
         Self {
             host,
             batch_rx,
             client: Client::new(),
+            http_requests,
         }
     }
 
@@ -79,7 +87,9 @@ impl Requestor {
     ) -> Result<(), ResponseError> {
         let response = match response {
             Ok(response) => response,
-            Err(_) => return Err(ResponseError::ServerError),
+            Err(_) => {
+                return Err(ResponseError::ServerError);
+            }
         };
 
         let content = match response.text().await {
@@ -186,41 +196,49 @@ impl Requestor {
         let sleep_handle = tokio::spawn(time::sleep(Duration::from_millis(1000)));
         stream::iter(batch.iter())
             .map(|query| async {
-                let query = query.clone();
-                match query {
-                    APIQuery::Temperature {
-                        experiment,
-                        start_time,
-                        end_time,
-                    } => {
-                        for _ in 0..3 {
-                            println!("Performing request");
+                for _ in 0..3 {
+                    let query = query.clone();
+                    match query {
+                        APIQuery::Temperature {
+                            experiment,
+                            start_time,
+                            end_time,
+                        } => {
                             let res = self
                                 .make_temperature_request(experiment.clone(), start_time, end_time)
                                 .await;
-                            println!("Request terminated: {:?}", res);
+
+                            self.http_requests
+                                .get_or_create(&Labels {
+                                    host_name: self.host.host_name.clone(),
+                                    endpoint: "/temperature".to_string(),
+                                    response_type: ResponseType::from(&res),
+                                })
+                                .inc();
                             if let Err(ResponseError::ServerError) = res {
                                 continue;
                             } else {
                                 return Some(());
                             }
                         }
-                        None
-                    }
-                    APIQuery::OutOfBounds { experiment } => {
-                        for _ in 0..3 {
-                            println!("Performing request");
+                        APIQuery::OutOfBounds { experiment } => {
                             let res = self.make_out_of_bounds_request(experiment.clone()).await;
-                            println!("Request terminated: {:?}", res);
+                            self.http_requests
+                                .get_or_create(&Labels {
+                                    host_name: self.host.host_name.clone(),
+                                    endpoint: "/temperature/out-of-bounds".to_string(),
+                                    response_type: ResponseType::from(&res),
+                                })
+                                .inc();
                             if let Err(ResponseError::ServerError) = res {
                                 continue;
                             } else {
                                 return Some(());
                             }
                         }
-                        None
                     }
                 }
+                return None;
             })
             .boxed()
             .buffer_unordered(50)
@@ -235,6 +253,7 @@ impl Requestor {
             .await;
 
         sleep_handle.await.expect("Should not fail");
+        println!("{:?}", self.http_requests);
         println!("Performed {} requests", batch.len());
     }
 
