@@ -8,9 +8,12 @@ use tokio::{
     time::{self, Duration},
 };
 
-use crate::consumer::{ExperimentDocument, Measurement};
 use crate::generator::APIQuery;
-use crate::metric::{Labels, ResponseType};
+use crate::metric::Metrics;
+use crate::{
+    consumer::{ExperimentDocument, Measurement},
+    metric::{ResponseCountLabels, ResponseType},
+};
 
 #[derive(Debug)]
 pub enum ResponseError {
@@ -46,20 +49,16 @@ pub struct Requestor {
     host: Host,
     batch_rx: Receiver<Arc<Vec<APIQuery>>>,
     client: Client,
-    http_requests: Arc<Family<Labels, Counter>>,
+    metrics: Metrics,
 }
 
 impl Requestor {
-    pub fn new(
-        host: Host,
-        batch_rx: Receiver<Arc<Vec<APIQuery>>>,
-        http_requests: Arc<Family<Labels, Counter>>,
-    ) -> Self {
+    pub fn new(host: Host, batch_rx: Receiver<Arc<Vec<APIQuery>>>, metrics: Metrics) -> Self {
         Self {
             host,
             batch_rx,
             client: Client::new(),
-            http_requests,
+            metrics,
         }
     }
 
@@ -208,8 +207,9 @@ impl Requestor {
                                 .make_temperature_request(experiment.clone(), start_time, end_time)
                                 .await;
 
-                            self.http_requests
-                                .get_or_create(&Labels {
+                            self.metrics
+                                .response_count
+                                .get_or_create(&ResponseCountLabels {
                                     host_name: self.host.host_name.clone(),
                                     endpoint: "/temperature".to_string(),
                                     response_type: ResponseType::from(&res),
@@ -223,8 +223,9 @@ impl Requestor {
                         }
                         APIQuery::OutOfBounds { experiment } => {
                             let res = self.make_out_of_bounds_request(experiment.clone()).await;
-                            self.http_requests
-                                .get_or_create(&Labels {
+                            self.metrics
+                                .response_count
+                                .get_or_create(&ResponseCountLabels {
                                     host_name: self.host.host_name.clone(),
                                     endpoint: "/temperature/out-of-bounds".to_string(),
                                     response_type: ResponseType::from(&res),
@@ -253,7 +254,6 @@ impl Requestor {
             .await;
 
         sleep_handle.await.expect("Should not fail");
-        println!("{:?}", self.http_requests);
         println!("Performed {} requests", batch.len());
     }
 

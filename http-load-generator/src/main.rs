@@ -1,6 +1,7 @@
 use clap::{command, Arg, ArgAction};
 use futures::future;
 use tokio::sync::mpsc;
+use std::process;
 
 mod consumer;
 mod generator;
@@ -10,6 +11,12 @@ mod requests;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    ctrlc::set_handler(move || {
+        println!("received Ctrl+C!");
+        process::exit(0);
+    })
+    .expect("Error setting Ctrl-C handler");
+
     let mut matches = command!() // requires `cargo` feature
         .next_line_help(true)
         .arg(Arg::new("secret-key")

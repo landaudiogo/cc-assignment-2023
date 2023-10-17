@@ -1,7 +1,6 @@
 use async_broadcast::broadcast;
 use futures::future;
 use prometheus_client::{
-    metrics::{counter::Counter, family::Family},
     registry::Registry,
 };
 use rand::Rng;
@@ -13,8 +12,9 @@ use tokio::{
 
 use crate::consumer::ExperimentDocument;
 use crate::generator::{self, APIQuery};
-use crate::metric::Labels;
 use crate::requests::{Host, Requestor};
+use crate::metric::{Metrics, MetricServer};
+
 
 async fn receive_experiments(
     experiments: Arc<RwLock<Vec<Arc<RwLock<ExperimentDocument>>>>>,
@@ -33,17 +33,9 @@ pub async fn start(mut rx: Receiver<ExperimentDocument>) {
 
     // Create a sample counter metric family utilizing the above custom label
     // type, representing the number of HTTP requests received.
-    let http_requests = Family::<Labels, Counter>::default();
-
-    // Register the metric family with the registry.
-    registry.register(
-        // With the metric name.
-        "http_requests",
-        // And the metric help text.
-        "Number of HTTP requests received",
-        http_requests.clone(),
-    );
-    let http_requests = Arc::new(http_requests);
+    let metrics = Metrics::new();
+    let metric_server = MetricServer::new(metrics.clone());
+    metric_server.start();
 
     let experiment = rx.recv().await.expect("Sender available");
     experiments
@@ -57,7 +49,7 @@ pub async fn start(mut rx: Receiver<ExperimentDocument>) {
     let servers = [Host::new("landau", "http://localhost:3000")];
     for host in servers {
         let batch_rx = batch_rx.clone();
-        let mut requestor = Requestor::new(host, batch_rx, http_requests.clone());
+        let mut requestor = Requestor::new(host, batch_rx, metrics.clone());
 
         tokio::spawn(async move {
             time::sleep(Duration::from_millis(5000)).await;
