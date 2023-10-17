@@ -5,12 +5,17 @@ use actix_web::{
 };
 use prometheus_client::{
     encoding::{text, EncodeLabelSet, EncodeLabelValue},
-    metrics::{counter::Counter, family::Family, histogram::Histogram},
+    metrics::{counter::Counter, family::Family, histogram::Histogram, gauge::Gauge},
     registry::Registry,
 };
 use std::sync::Mutex;
 
 use crate::requests::ResponseError;
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
+pub struct RequestRateLabels {
+    pub host_name: String
+}
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
 pub struct ResponseCountLabels {
@@ -44,6 +49,8 @@ impl From<&Result<(), ResponseError>> for ResponseType {
 pub struct Metrics {
     pub response_count: Family<ResponseCountLabels, Counter>,
     pub response_time_histogram: Family<ResponseCountLabels, Histogram>,
+    pub target_request_rate: Family<RequestRateLabels, Gauge>,
+    pub effective_request_rate: Family<RequestRateLabels, Gauge>,
 }
 
 impl Metrics {
@@ -57,6 +64,8 @@ impl Metrics {
         Self {
             response_count: Family::<ResponseCountLabels, Counter>::default(),
             response_time_histogram,
+            target_request_rate: Family::<RequestRateLabels, Gauge>::default(),
+            effective_request_rate: Family::<RequestRateLabels, Gauge>::default(),
         }
     }
 }
@@ -75,8 +84,18 @@ impl MetricServer {
         );
         registry.register(
             "response_rtt_histogram",
-            "Count of response",
+            "Response round trip time in seconds",
             metrics.response_time_histogram.clone(),
+        );
+        registry.register(
+            "target_request_rate",
+            "The target request rate at which a host is being queried",
+            metrics.target_request_rate.clone(),
+        );
+        registry.register(
+            "effective_request_rate",
+            "Effective request rate at which the host is being queried",
+            metrics.effective_request_rate.clone(),
         );
 
         Self { registry }

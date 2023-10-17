@@ -11,12 +11,12 @@ use tokio::{
     time::{self, Duration},
 };
 
-use crate::generator::APIQuery;
 use crate::metric::Metrics;
 use crate::{
     consumer::{ExperimentDocument, Measurement},
     metric::{ResponseCountLabels, ResponseType},
 };
+use crate::{generator::APIQuery, metric::RequestRateLabels};
 
 #[derive(Debug)]
 pub enum ResponseError {
@@ -204,7 +204,46 @@ impl Requestor {
         )
     }
 
+    fn update_counters(&self, response_type: &Result<(), ResponseError>, rtt: &stdDuration) {
+        self.metrics
+            .response_count
+            .get_or_create(&ResponseCountLabels {
+                host_name: self.host.host_name.clone(),
+                endpoint: "/temperature".to_string(),
+                response_type: ResponseType::from(response_type),
+            })
+            .inc();
+        self.metrics
+            .response_time_histogram
+            .get_or_create(&ResponseCountLabels {
+                host_name: self.host.host_name.clone(),
+                endpoint: "/temperature".to_string(),
+                response_type: ResponseType::from(response_type),
+            })
+            .observe(rtt.as_millis() as f64 / 1000.0);
+    }
+
+    fn update_gauge_target(&self, value: i64) {
+        self.metrics
+            .target_request_rate
+            .get_or_create(&RequestRateLabels {
+                host_name: self.host.host_name.clone(),
+            })
+            .set(value);
+    }
+
+    fn update_gauge_effective(&self, value: i64) {
+        println!("{}", value);
+        self.metrics
+            .effective_request_rate
+            .get_or_create(&RequestRateLabels {
+                host_name: self.host.host_name.clone(),
+            }) .set(value);
+    }
+
     async fn process_batch(&mut self, batch: Arc<Vec<APIQuery>>) {
+        self.update_gauge_target(batch.len() as i64);
+        let start = Instant::now();
         let sleep_handle = tokio::spawn(time::sleep(Duration::from_millis(1000)));
         stream::iter(batch.iter())
             .map(|query| async {
@@ -216,51 +255,21 @@ impl Requestor {
                             start_time,
                             end_time,
                         } => {
-                            let res = self
+                            let (response_type, rtt) = self
                                 .make_temperature_request(experiment.clone(), start_time, end_time)
                                 .await;
-
-                            self.metrics
-                                .response_count
-                                .get_or_create(&ResponseCountLabels {
-                                    host_name: self.host.host_name.clone(),
-                                    endpoint: "/temperature".to_string(),
-                                    response_type: ResponseType::from(&res.0),
-                                })
-                                .inc();
-                            self.metrics
-                                .response_time_histogram
-                                .get_or_create(&ResponseCountLabels {
-                                    host_name: self.host.host_name.clone(),
-                                    endpoint: "/temperature".to_string(),
-                                    response_type: ResponseType::from(&res.0),
-                                })
-                                .observe(res.1.as_millis() as f64/1000.0);
-                            if let Err(ResponseError::ServerError) = res.0 {
+                            self.update_counters(&response_type, &rtt);
+                            if let Err(ResponseError::ServerError) = response_type {
                                 continue;
                             } else {
                                 return Some(());
                             }
                         }
                         APIQuery::OutOfBounds { experiment } => {
-                            let res = self.make_out_of_bounds_request(experiment.clone()).await;
-                            self.metrics
-                                .response_count
-                                .get_or_create(&ResponseCountLabels {
-                                    host_name: self.host.host_name.clone(),
-                                    endpoint: "/temperature/out-of-bounds".to_string(),
-                                    response_type: ResponseType::from(&res.0),
-                                })
-                                .inc();
-                            self.metrics
-                                .response_time_histogram
-                                .get_or_create(&ResponseCountLabels {
-                                    host_name: self.host.host_name.clone(),
-                                    endpoint: "/temperature/out-of-bounds".to_string(),
-                                    response_type: ResponseType::from(&res.0),
-                                })
-                                .observe(res.1.as_millis() as f64/1000.0);
-                            if let Err(ResponseError::ServerError) = res.0 {
+                            let (response_type, rtt) =
+                                self.make_out_of_bounds_request(experiment.clone()).await;
+                            self.update_counters(&response_type, &rtt);
+                            if let Err(ResponseError::ServerError) = response_type {
                                 continue;
                             } else {
                                 return Some(());
@@ -283,6 +292,10 @@ impl Requestor {
             .await;
 
         sleep_handle.await.expect("Should not fail");
+        let duration = start.elapsed();
+        self.update_gauge_effective(
+            ((batch.len() as f64) / (duration.as_millis() as f64 / 1000.0)).round() as i64
+        );
         println!("Performed {} requests", batch.len());
     }
 
