@@ -1,14 +1,16 @@
-use clap::{command, Arg, ArgAction};
+use clap::{command, value_parser, Arg, ArgAction};
 use futures::future;
 use std::process;
 use tokio::sync::mpsc;
 
-mod consumer;
+mod consume;
 mod experiment;
 mod generator;
 mod metric;
 mod receiver;
 mod requests;
+
+use crate::consume::{Consume, ConsumeConfiguration};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -45,8 +47,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .long("group-id")
             .action(ArgAction::Set)
         )
+        .arg(Arg::new("consumer-wait-before-send")
+            .required(false)
+            .long("consumer-wait-before-send")
+            .action(ArgAction::Set)
+            .default_value("60")
+            .value_parser(value_parser!(u8))
+            .help("Time the consumer should wait before forwarding the experiment to the receiver")
+        )
         .get_matches();
-    // requests::make_request().await?;
+
+    let consume_config = ConsumeConfiguration::from(&mut matches);
+    let consume = Consume::new(consume_config);
 
     let mut handles = vec![];
     let (tx, rx) = mpsc::channel(1000);
@@ -54,18 +66,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         receiver::start(rx).await;
     }));
     handles.push(tokio::spawn(async move {
-        consumer::start(
-            &matches
-                .remove_one::<String>("broker-list")
-                .expect("Required"),
-            &matches.remove_one::<String>("group-id").expect("Required"),
-            &vec![matches
-                .remove_one::<String>("topic")
-                .expect("Required")
-                .as_str()],
-            tx,
-        )
-        .await;
+        consume.start(tx).await;
     }));
     future::join_all(handles).await;
     Ok(())
