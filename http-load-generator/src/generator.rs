@@ -3,7 +3,7 @@ use rand::Rng;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::consumer::ExperimentDocument;
+use crate::experiment::ExperimentDocument;
 
 #[derive(Debug, Clone)]
 pub enum APIQuery {

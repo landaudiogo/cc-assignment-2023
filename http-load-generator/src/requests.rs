@@ -1,6 +1,5 @@
 use async_broadcast::Receiver;
 use futures::{stream, StreamExt};
-use prometheus_client::metrics::{counter::Counter, family::Family};
 use reqwest::{Client, Error, RequestBuilder, Response};
 use std::{
     sync::Arc,
@@ -13,7 +12,7 @@ use tokio::{
 
 use crate::metric::Metrics;
 use crate::{
-    consumer::{ExperimentDocument, Measurement},
+    experiment::{ExperimentDocument, Measurement},
     metric::{ResponseCountLabels, ResponseType},
 };
 use crate::{generator::APIQuery, metric::RequestRateLabels};

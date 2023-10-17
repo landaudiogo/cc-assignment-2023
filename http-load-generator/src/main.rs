@@ -4,6 +4,7 @@ use std::process;
 use tokio::sync::mpsc;
 
 mod consumer;
+mod experiment;
 mod generator;
 mod metric;
 mod receiver;

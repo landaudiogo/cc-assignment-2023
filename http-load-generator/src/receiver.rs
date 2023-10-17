@@ -1,6 +1,5 @@
 use async_broadcast::broadcast;
 use futures::future;
-use prometheus_client::registry::Registry;
 use rand::Rng;
 use std::sync::Arc;
 use tokio::{
@@ -8,10 +7,12 @@ use tokio::{
     time::{self, Duration},
 };
 
-use crate::consumer::ExperimentDocument;
+use crate::experiment::ExperimentDocument;
 use crate::generator::{self, APIQuery};
 use crate::metric::{MetricServer, Metrics};
 use crate::requests::{Host, Requestor};
+
+struct ExperimentReceiverConfig {}
 
 async fn receive_experiments(
     experiments: Arc<RwLock<Vec<Arc<RwLock<ExperimentDocument>>>>>,
@@ -26,7 +27,6 @@ async fn receive_experiments(
 pub async fn start(mut rx: Receiver<ExperimentDocument>) {
     let experiments = Arc::new(RwLock::new(vec![]));
     let (batch_tx, batch_rx) = broadcast::<Arc<Vec<APIQuery>>>(1000);
-    let mut registry = <Registry>::default();
 
     // Create a sample counter metric family utilizing the above custom label
     // type, representing the number of HTTP requests received.

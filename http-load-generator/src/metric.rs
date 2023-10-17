@@ -1,8 +1,4 @@
-use actix_web::{
-    get,
-    web::{self, Data},
-    App, HttpResponse, HttpServer, Responder, Result,
-};
+use actix_web::{get, web::Data, App, HttpServer, Responder, Result};
 use prometheus_client::{
     encoding::{text, EncodeLabelSet, EncodeLabelValue},
     metrics::{counter::Counter, family::Family, gauge::Gauge, histogram::Histogram},
