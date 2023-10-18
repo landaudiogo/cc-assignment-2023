@@ -215,8 +215,6 @@ fn compute_notification_type(
     }
 }
 
-// TODO
-// key paramater
 pub fn temperature_events<'b>(
     sample_iter: IterMut<'b>,
     experiment_id: &'b str,
@@ -232,17 +230,19 @@ pub fn temperature_events<'b>(
         let span = span!(tracing::Level::INFO, "measurement", measurement_id);
         let _enter = span.enter();
         let current_time = time::current_epoch();
-        let measurement = Measurement {
-            temperature: sample.cur(),
-            timestamp: current_time,
-        };
 
+        let notification_type = compute_notification_type(sample, prev_sample, &stage);
         let hash_data = HashData {
-            notification_type: compute_notification_type(sample, prev_sample, &stage),
+            notification_type: notification_type.clone(),
             timestamp: current_time,
             experiment_id: experiment_id.into(),
             measurement_id: measurement_id.into(),
             researcher: researcher.into(),
+        };
+        let measurement = Measurement {
+            temperature: sample.cur(),
+            timestamp: current_time,
+            notification_type: notification_type,
         };
         let measurement_hash = hash_data.encrypt(secret_key.as_bytes());
         prev_sample = Some(sample);

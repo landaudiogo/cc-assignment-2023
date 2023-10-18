@@ -4,11 +4,13 @@ use rdkafka::message::OwnedHeaders;
 use serde::Deserialize;
 use std::time::Duration;
 use tokio::{task::JoinHandle, time};
-use tracing::{info, Instrument};
+use tracing::{info, Instrument, Span};
 use uuid::Uuid;
 
+use event_hash::NotificationType;
+
 use crate::config::{ConfigEntry, UncheckedTempRange};
-use crate::events::{self, KafkaTopicProducer, RecordData};
+use crate::events::{self, EventWrapper, KafkaTopicProducer, RecordData};
 
 #[derive(Clone, Copy)]
 pub enum ExperimentStage {
@@ -235,37 +237,18 @@ impl Experiment {
             &self.stage,
             &self.config.secret_key,
         );
-        for sensor_events in stabilization_events {
-            let sample_rate = self.config.sample_rate;
-            self.measurements.push(sensor_events.2);
-            let sleep_handle = tokio::spawn(async move {
-                time::sleep(Duration::from_millis(sample_rate)).await;
-            });
-            let mut handles: Vec<JoinHandle<_>> = sensor_events
-                .0
-                .into_iter()
-                .map(|event| {
-                    let record = RecordData {
-                        payload: event,
-                        key: Some(self.config.experiment_id.clone()),
-                        headers: OwnedHeaders::new()
-                            .add("record_name", "sensor_temperature_measured"),
-                    };
-                    let producer = self.producer.clone();
-                    let topic = self.config.topic.clone();
-                    tokio::spawn(
-                        async move {
-                            producer
-                                .send_event(record, &topic)
-                                .await
-                                .expect("Failed to produce message");
-                        }
-                        .instrument(sensor_events.1.clone()),
-                    )
-                })
-                .collect();
-            handles.push(sleep_handle);
-            future::join_all(handles).await;
+
+        for (sensor_events, _span, measurement) in stabilization_events {
+            measurement
+                .persist_sensor_events(
+                    &self.producer,
+                    &self.config.topic,
+                    &self.config.experiment_id,
+                    sensor_events,
+                    self.config.sample_rate,
+                )
+                .await;
+            self.measurements.push(measurement);
         }
     }
 
@@ -292,37 +275,17 @@ impl Experiment {
             &self.stage,
             &self.config.secret_key,
         );
-        for sensor_events in carry_out_events {
-            let sample_rate = self.config.sample_rate;
-            let sleep_handle = tokio::spawn(async move {
-                time::sleep(Duration::from_millis(sample_rate)).await;
-            });
-            self.measurements.push(sensor_events.2);
-            let mut handles: Vec<JoinHandle<_>> = sensor_events
-                .0
-                .into_iter()
-                .map(|event| {
-                    let record = RecordData {
-                        payload: event,
-                        key: Some(self.config.experiment_id.clone()),
-                        headers: OwnedHeaders::new()
-                            .add("record_name", "sensor_temperature_measured"),
-                    };
-                    let producer = self.producer.clone();
-                    let topic = self.config.topic.clone();
-                    tokio::spawn(
-                        async move {
-                            producer
-                                .send_event(record, &topic)
-                                .await
-                                .expect("Failed to produce message");
-                        }
-                        .instrument(sensor_events.1.clone()),
-                    )
-                })
-                .collect();
-            handles.push(sleep_handle);
-            future::join_all(handles).await;
+        for (sensor_events, _span, measurement) in carry_out_events {
+            measurement
+                .persist_sensor_events(
+                    &self.producer,
+                    &self.config.topic,
+                    &self.config.experiment_id,
+                    sensor_events,
+                    self.config.sample_rate,
+                )
+                .await;
+            self.measurements.push(measurement);
         }
 
         self.stage = ExperimentStage::Terminated;
@@ -368,6 +331,46 @@ impl Experiment {
 pub struct Measurement {
     pub timestamp: f64,
     pub temperature: f32,
+    pub notification_type: Option<NotificationType>,
+}
+
+impl Measurement {
+    pub async fn persist_sensor_events(
+        &self,
+        producer: &KafkaTopicProducer,
+        topic: &str,
+        experiment_id: &str,
+        sensor_events: Vec<EventWrapper>,
+        period_millis: u64,
+    ) {
+        let sleep_handle = tokio::spawn(async move {
+            time::sleep(Duration::from_millis(period_millis)).await;
+        });
+        let span = Span::current();
+        let mut handles: Vec<JoinHandle<_>> = sensor_events
+            .into_iter()
+            .map(|event| {
+                let record = RecordData {
+                    payload: event,
+                    key: Some(experiment_id.to_string()),
+                    headers: OwnedHeaders::new().add("record_name", "sensor_temperature_measured"),
+                };
+                let producer = producer.clone();
+                let topic = topic.to_string().clone();
+                tokio::spawn(
+                    async move {
+                        producer
+                            .send_event(record, &topic)
+                            .await
+                            .expect("Failed to produce message");
+                    }
+                    .instrument(span.clone()),
+                )
+            })
+            .collect();
+        handles.push(sleep_handle);
+        future::join_all(handles).await;
+    }
 }
 
 pub struct IterMut<'a> {

@@ -7,7 +7,7 @@ use base64::{engine::general_purpose, Engine as _};
 use generic_array::GenericArray;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub enum NotificationType {
     OutOfRange,
     Stabilized,
