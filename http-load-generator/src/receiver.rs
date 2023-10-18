@@ -12,27 +12,34 @@ use tokio::{
 use crate::experiment::ExperimentDocument;
 use crate::generator::{self, APIQuery};
 use crate::metric::{MetricServer, Metrics};
-use crate::requests::{Host, Requestor};
+use crate::requests::{Host, Requestor, RequestorConfiguration};
 
 #[derive(Deserialize)]
 pub struct ExperimentReceiverConfig {
     hosts: Vec<Host>,
+
+    #[serde(skip)]
+    requestor_config: RequestorConfiguration,
 }
 
 impl ExperimentReceiverConfig {
-    pub fn from_file(file: &str) -> Self {
+    pub fn from_file(file: &str, requestor_config: RequestorConfiguration) -> Self {
         let content =
             fs::read_to_string(file).expect(format!("File `{}` should exist", file).as_str());
         let hosts: Vec<Host> =
             serde_json::from_str(content.as_str()).expect("Could not deserialize config file");
-        Self { hosts }
+        Self {
+            hosts,
+            requestor_config: requestor_config,
+        }
     }
 }
 
 impl From<&mut ArgMatches> for ExperimentReceiverConfig {
     fn from(args: &mut ArgMatches) -> Self {
         let file = args.remove_one::<String>("hosts-file").expect("Required");
-        Self::from_file(file.as_str())
+        let requestor_config = RequestorConfiguration::from(args);
+        Self::from_file(file.as_str(), requestor_config)
     }
 }
 
@@ -63,7 +70,6 @@ impl ExperimentReceiver {
     }
 
     /// Spawn 1 thread per group
-    /// TODO: Parametrized start wait
     fn create_requestors(
         &self,
         batch_rx: async_broadcast::Receiver<Arc<Vec<APIQuery>>>,
@@ -71,10 +77,14 @@ impl ExperimentReceiver {
     ) {
         for host in self.config.hosts.iter() {
             let batch_rx = batch_rx.clone();
-            let mut requestor = Requestor::new(host.clone(), batch_rx, metrics.clone());
+            let mut requestor = Requestor::new(
+                self.config.requestor_config.clone(),
+                host.clone(),
+                batch_rx,
+                metrics.clone(),
+            );
 
             tokio::spawn(async move {
-                time::sleep(Duration::from_millis(5000)).await;
                 requestor.start().await;
             });
         }

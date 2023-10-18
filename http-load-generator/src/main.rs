@@ -11,7 +11,7 @@ mod receiver;
 mod requests;
 
 use crate::consume::{Consume, ConsumeConfiguration};
-use crate::receiver::{ExperimentReceiverConfig, ExperimentReceiver};
+use crate::receiver::{ExperimentReceiver, ExperimentReceiverConfig};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -61,6 +61,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .long("hosts-file")
             .action(ArgAction::Set)
             .help("The file containing the list of hosts to be queried")
+        )
+        .arg(Arg::new("requestor-lag")
+            .required(false)
+            .long("requestor-lag")
+            .action(ArgAction::Set)
+            .default_value("5")
+            .value_parser(value_parser!(u8))
+            .help("Time the requestor lags behind the generator.")
         )
         .get_matches();
 

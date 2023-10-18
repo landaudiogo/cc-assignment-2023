@@ -1,4 +1,5 @@
 use async_broadcast::Receiver;
+use clap::ArgMatches;
 use futures::{stream, StreamExt};
 use reqwest::{Client, Error, RequestBuilder, Response};
 use serde::Deserialize;
@@ -40,8 +41,23 @@ pub struct Host {
     base_url: String,
 }
 
+#[derive(Clone)]
 pub struct RequestorConfiguration {
-    
+    lag: u8,
+}
+
+impl From<&mut ArgMatches> for RequestorConfiguration {
+    fn from(args: &mut ArgMatches) -> Self {
+        Self {
+            lag: args.remove_one::<u8>("requestor-lag").expect("Required"),
+        }
+    }
+}
+
+impl Default for RequestorConfiguration {
+    fn default() -> Self {
+        Self { lag: 5 }
+    }
 }
 
 pub struct Requestor {
@@ -49,15 +65,22 @@ pub struct Requestor {
     batch_rx: Receiver<Arc<Vec<APIQuery>>>,
     client: Client,
     metrics: Metrics,
+    config: RequestorConfiguration,
 }
 
 impl Requestor {
-    pub fn new(host: Host, batch_rx: Receiver<Arc<Vec<APIQuery>>>, metrics: Metrics) -> Self {
+    pub fn new(
+        config: RequestorConfiguration,
+        host: Host,
+        batch_rx: Receiver<Arc<Vec<APIQuery>>>,
+        metrics: Metrics,
+    ) -> Self {
         Self {
             host,
             batch_rx,
             client: Client::new(),
             metrics,
+            config,
         }
     }
 
@@ -297,6 +320,7 @@ impl Requestor {
     }
 
     pub async fn start(&mut self) {
+        time::sleep(Duration::from_millis(self.config.lag as u64 * 1000)).await;
         while let Ok(batch) = self.batch_rx.recv().await {
             self.process_batch(batch).await;
         }
