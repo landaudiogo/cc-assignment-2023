@@ -225,12 +225,12 @@ impl Requestor {
         )
     }
 
-    fn update_counters(&self, response_type: &Result<(), ResponseError>, rtt: &stdDuration) {
+    fn update_counters(&self, response_type: &Result<(), ResponseError>, rtt: &stdDuration, endpoint: &str) {
         self.metrics
             .response_count
             .get_or_create(&ResponseCountLabels {
                 host_name: self.host.host_name.clone(),
-                endpoint: "/temperature".to_string(),
+                endpoint: endpoint.to_string(),
                 response_type: ResponseType::from(response_type),
             })
             .inc();
@@ -238,7 +238,7 @@ impl Requestor {
             .response_time_histogram
             .get_or_create(&ResponseCountLabels {
                 host_name: self.host.host_name.clone(),
-                endpoint: "/temperature".to_string(),
+                endpoint: endpoint.to_string(),
                 response_type: ResponseType::from(response_type),
             })
             .observe(rtt.as_millis() as f64 / 1000.0);
@@ -254,7 +254,6 @@ impl Requestor {
     }
 
     fn update_gauge_effective(&self, value: i64) {
-        println!("{}", value);
         self.metrics
             .effective_request_rate
             .get_or_create(&RequestRateLabels {
@@ -280,7 +279,7 @@ impl Requestor {
                             let (response_type, rtt) = self
                                 .make_temperature_request(experiment.clone(), start_time, end_time)
                                 .await;
-                            self.update_counters(&response_type, &rtt);
+                            self.update_counters(&response_type, &rtt, "/temperature");
                             if let Err(ResponseError::ServerError) = response_type {
                                 continue;
                             } else {
@@ -290,7 +289,7 @@ impl Requestor {
                         APIQuery::OutOfBounds { experiment } => {
                             let (response_type, rtt) =
                                 self.make_out_of_bounds_request(experiment.clone()).await;
-                            self.update_counters(&response_type, &rtt);
+                            self.update_counters(&response_type, &rtt, "/temperature/out-of-bounds");
                             if let Err(ResponseError::ServerError) = response_type {
                                 continue;
                             } else {
