@@ -225,7 +225,12 @@ impl Requestor {
         )
     }
 
-    fn update_counters(&self, response_type: &Result<(), ResponseError>, rtt: &stdDuration, endpoint: &str) {
+    fn update_counters(
+        &self,
+        response_type: &Result<(), ResponseError>,
+        rtt: &stdDuration,
+        endpoint: &str,
+    ) {
         self.metrics
             .response_count
             .get_or_create(&ResponseCountLabels {
@@ -234,14 +239,16 @@ impl Requestor {
                 response_type: ResponseType::from(response_type),
             })
             .inc();
-        self.metrics
-            .response_time_histogram
-            .get_or_create(&ResponseCountLabels {
-                host_name: self.host.host_name.clone(),
-                endpoint: endpoint.to_string(),
-                response_type: ResponseType::from(response_type),
-            })
-            .observe(rtt.as_millis() as f64 / 1000.0);
+        if let Ok(()) = response_type {
+            self.metrics
+                .response_time_histogram
+                .get_or_create(&ResponseCountLabels {
+                    host_name: self.host.host_name.clone(),
+                    endpoint: endpoint.to_string(),
+                    response_type: ResponseType::from(response_type),
+                })
+                .observe(rtt.as_millis() as f64 / 1000.0);
+        }
     }
 
     fn update_gauge_target(&self, value: i64) {
@@ -268,6 +275,7 @@ impl Requestor {
         let sleep_handle = tokio::spawn(time::sleep(Duration::from_millis(1000)));
         stream::iter(batch.iter())
             .map(|query| async {
+                let mut endpoint = "".to_string();
                 for _ in 0..=self.config.retries {
                     let query = query.clone();
                     match query {
@@ -276,38 +284,44 @@ impl Requestor {
                             start_time,
                             end_time,
                         } => {
+                            endpoint = "/temperature".to_string();
                             let (response_type, rtt) = self
                                 .make_temperature_request(experiment.clone(), start_time, end_time)
                                 .await;
-                            self.update_counters(&response_type, &rtt, "/temperature");
                             if let Err(ResponseError::ServerError) = response_type {
                                 continue;
                             } else {
-                                return Some(());
+                                return (response_type, rtt, endpoint);
                             }
                         }
                         APIQuery::OutOfBounds { experiment } => {
+                            endpoint = "/temperature/out-of-bounds".to_string();
                             let (response_type, rtt) =
                                 self.make_out_of_bounds_request(experiment.clone()).await;
-                            self.update_counters(&response_type, &rtt, "/temperature/out-of-bounds");
                             if let Err(ResponseError::ServerError) = response_type {
                                 continue;
                             } else {
-                                return Some(());
+                                return (response_type, rtt, endpoint);
                             }
                         }
                     }
                 }
-                return None;
+                return (
+                    Err(ResponseError::ServerError),
+                    Duration::new(0, 0),
+                    endpoint,
+                );
             })
             .boxed()
             .buffer_unordered(self.config.max_in_flight as usize)
-            .for_each(|response| async move {
+            .for_each(|response| async {
                 match response {
-                    None => {
-                        // Register failure in histogram
+                    (Err(response_type), rtt, endpoint) => {
+                        self.update_counters(&Err(response_type), &rtt, &endpoint)
                     }
-                    _ => {}
+                    (Ok(_), rtt, endpoint) => {
+                        self.update_counters(&Ok(()), &rtt, &endpoint);
+                    }
                 }
             })
             .await;
