@@ -44,19 +44,23 @@ pub struct Host {
 #[derive(Clone)]
 pub struct RequestorConfiguration {
     lag: u8,
+    retries: u8,
 }
 
 impl From<&mut ArgMatches> for RequestorConfiguration {
     fn from(args: &mut ArgMatches) -> Self {
         Self {
             lag: args.remove_one::<u8>("requestor-lag").expect("Required"),
+            retries: args
+                .remove_one::<u8>("requestor-retries")
+                .expect("Required"),
         }
     }
 }
 
 impl Default for RequestorConfiguration {
     fn default() -> Self {
-        Self { lag: 5 }
+        Self { lag: 5, retries: 2 }
     }
 }
 
@@ -267,7 +271,7 @@ impl Requestor {
         let sleep_handle = tokio::spawn(time::sleep(Duration::from_millis(1000)));
         stream::iter(batch.iter())
             .map(|query| async {
-                for _ in 0..3 {
+                for _ in 0..=self.config.retries {
                     let query = query.clone();
                     match query {
                         APIQuery::Temperature {
