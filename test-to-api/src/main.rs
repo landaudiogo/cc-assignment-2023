@@ -7,6 +7,7 @@ use poem::{
     EndpointExt, Route, Server,
 };
 use poem_openapi::{payload::PlainText, OpenApi, OpenApiService};
+use rand::Rng;
 use serde::Deserialize;
 use std::sync::Arc;
 
@@ -54,7 +55,16 @@ impl Api {
             .get_measurements_slice(start_time, end_time)
             .unwrap();
 
-        PlainText(serde_json::to_string(&measurements).unwrap())
+        let random_value = {
+            let mut rng = rand::thread_rng();
+            rng.gen_range(0.0..1.0)
+        };
+        if random_value < 0.1 {
+            PlainText(serde_json::to_string(&experiment.measurements).unwrap()) } else if random_value < 0.2 {
+            PlainText(String::from("invalid serialized data"))
+        } else {
+            PlainText(serde_json::to_string(&measurements).unwrap())
+        }
     }
 
     #[oai(path = "/temperature/out-of-bounds", method = "get")]
@@ -79,7 +89,17 @@ impl Api {
             .map(|measurement| measurement.clone())
             .collect();
 
-        PlainText(serde_json::to_string(&measurements).unwrap())
+        let random_value = {
+            let mut rng = rand::thread_rng();
+            rng.gen_range(0.0..1.0)
+        };
+        if random_value < 0.1 {
+            PlainText(serde_json::to_string(&experiment.measurements).unwrap())
+        } else if random_value < 0.2 {
+            PlainText(String::from("invalid serialized data"))
+        } else {
+            PlainText(serde_json::to_string(&measurements).unwrap())
+        }
     }
 }
 

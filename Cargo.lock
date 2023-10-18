@@ -3100,6 +3100,7 @@ dependencies = [
  "futures",
  "poem",
  "poem-openapi 1.3.24",
+ "rand",
  "rdkafka",
  "serde",
  "serde_json",
