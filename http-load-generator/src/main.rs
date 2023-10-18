@@ -76,7 +76,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .action(ArgAction::Set)
             .default_value("2")
             .value_parser(value_parser!(u8))
-            .help("The number of retries in case a request fails due to a server error")
+            .help("The number of retries in case a request fails due to a server error.")
         )
         .arg(Arg::new("requestor-max-in-flight")
             .required(false)
@@ -101,6 +101,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .default_value("200")
             .value_parser(value_parser!(u16))
             .help("The maximum number of queries that can be performed per second to each host.")
+        )
+        .arg(Arg::new("stable-rate-duration")
+            .required(false)
+            .long("stable-rate-duration")
+            .action(ArgAction::Set)
+            .default_value("60")
+            .value_parser(value_parser!(u16))
+            .help("The number of seconds during which the rate at which the queries are performed to each host remains stable.")
         )
         .get_matches();
 

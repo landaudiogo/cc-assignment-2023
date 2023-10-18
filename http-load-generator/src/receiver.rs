@@ -32,6 +32,7 @@ pub struct ExperimentReceiverConfig {
     hosts: Vec<Host>,
     requestor_config: RequestorConfiguration,
     batch_size: BatchSize,
+    stable_rate: u16,
 }
 
 impl From<&mut ArgMatches> for ExperimentReceiverConfig {
@@ -46,11 +47,15 @@ impl From<&mut ArgMatches> for ExperimentReceiverConfig {
             args.remove_one::<u16>("max-batch-size").expect("Required"),
         )
         .expect("min-batch-size should be smaller than max-batch-size");
+        let stable_rate = args
+            .remove_one::<u16>("stable-rate-duration")
+            .expect("Required");
         let requestor_config = RequestorConfiguration::from(args);
         Self {
             requestor_config,
             hosts,
             batch_size,
+            stable_rate,
         }
     }
 }
@@ -118,20 +123,18 @@ impl ExperimentReceiver {
         // Each iteration receives messages and generates load for the next minute
         // Sleep for 60 seconds after generating all the requests, if there are new experiments, read
         // them and generate the load, otherwise just generate the load with the experiments available.
-        //
-        // TODO: Parametrizable MAX_BATCH_SIZE
         loop {
             self.receive_experiments().await;
             let mut handles = vec![];
             handles.push(tokio::spawn(async move {
-                time::sleep(Duration::from_millis(60 * 1000)).await;
+                time::sleep(Duration::from_millis(self.config.stable_rate as u64 * 1000)).await;
             }));
             let batch_size = {
                 let mut rng = rand::thread_rng();
                 rng.gen_range(self.config.batch_size.min..self.config.batch_size.max)
             };
             handles.append(
-                &mut (0..60)
+                &mut (0..self.config.stable_rate)
                     .map(|_| {
                         let experiments = self.experiments.clone();
                         let batch_tx = batch_tx.clone();
