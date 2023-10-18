@@ -166,7 +166,14 @@ impl Api {
 
         if let (Some(token), Some(pool)) = (token.0, pool.as_ref()) {
             let claims = jwt::decode(&token)?.claims;
-            store::insert_latency(pool, &claims.sub, &body.measurement_id, &latency).await?;
+            store::insert_latency(
+                pool,
+                &claims.sub,
+                &body.experiment_id,
+                &body.measurement_id,
+                &latency,
+            )
+            .await?;
         }
 
         info!(
