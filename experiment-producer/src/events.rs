@@ -226,7 +226,7 @@ pub fn temperature_events<'b>(
     let mut prev_sample = None;
 
     Box::new(sample_iter.map(move |sample| {
-        let measurement_id = &format!("{}", Uuid::new_v4());
+        let measurement_id = format!("{}", Uuid::new_v4());
         let span = span!(tracing::Level::INFO, "measurement", measurement_id);
         let _enter = span.enter();
         let current_time = time::current_epoch();
@@ -236,13 +236,14 @@ pub fn temperature_events<'b>(
             notification_type: notification_type.clone(),
             timestamp: current_time,
             experiment_id: experiment_id.into(),
-            measurement_id: measurement_id.into(),
+            measurement_id: measurement_id.clone(),
             researcher: researcher.into(),
         };
         let measurement = Measurement {
+            measurement_id: measurement_id.clone(),
             temperature: sample.cur(),
             timestamp: current_time,
-            notification_type: notification_type,
+            notification_type,
         };
         let measurement_hash = hash_data.encrypt(secret_key.as_bytes());
         prev_sample = Some(sample);
@@ -252,7 +253,7 @@ pub fn temperature_events<'b>(
             .map(|(sensor_id, sensor_temperature)| {
                 temperature_measured_event(
                     experiment_id,
-                    measurement_id,
+                    measurement_id.as_str(),
                     sensor_id,
                     sensor_temperature,
                     current_time,

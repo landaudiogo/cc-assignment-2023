@@ -986,6 +986,7 @@ version = "0.1.0"
 dependencies = [
  "apache-avro",
  "clap",
+ "dotenv",
  "event-hash",
  "futures",
  "rand",

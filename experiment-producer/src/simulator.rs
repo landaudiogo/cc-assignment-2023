@@ -2,6 +2,7 @@ use futures::future;
 use rand::Rng;
 use rdkafka::message::OwnedHeaders;
 use serde::Deserialize;
+use sqlx::{Pool, Postgres};
 use std::time::Duration;
 use tokio::{task::JoinHandle, time};
 use tracing::{info, Instrument, Span};
@@ -10,6 +11,7 @@ use uuid::Uuid;
 use event_hash::NotificationType;
 
 use crate::config::{ConfigEntry, UncheckedTempRange};
+use crate::database;
 use crate::events::{self, EventWrapper, KafkaTopicProducer, RecordData};
 
 #[derive(Clone, Copy)]
@@ -178,10 +180,16 @@ pub struct Experiment {
     stage: ExperimentStage,
     config: ExperimentConfiguration,
     producer: KafkaTopicProducer,
+    pool: Option<Pool<Postgres>>,
 }
 
 impl Experiment {
-    pub fn new(start: f32, config: ExperimentConfiguration, producer: KafkaTopicProducer) -> Self {
+    pub fn new(
+        start: f32,
+        config: ExperimentConfiguration,
+        producer: KafkaTopicProducer,
+        pool: Option<Pool<Postgres>>,
+    ) -> Self {
         let sample = TemperatureSample {
             cur: start,
             temp_range: config.temp_range,
@@ -192,6 +200,7 @@ impl Experiment {
             sample,
             producer,
             config,
+            pool,
         }
     }
 
@@ -242,6 +251,7 @@ impl Experiment {
             measurement
                 .persist_sensor_events(
                     &self.producer,
+                    self.pool.clone(),
                     &self.config.topic,
                     &self.config.experiment_id,
                     sensor_events,
@@ -279,6 +289,7 @@ impl Experiment {
             measurement
                 .persist_sensor_events(
                     &self.producer,
+                    self.pool.clone(),
                     &self.config.topic,
                     &self.config.experiment_id,
                     sensor_events,
@@ -329,6 +340,7 @@ impl Experiment {
 
 #[derive(Debug)]
 pub struct Measurement {
+    pub measurement_id: String,
     pub timestamp: f64,
     pub temperature: f32,
     pub notification_type: Option<NotificationType>,
@@ -338,6 +350,7 @@ impl Measurement {
     pub async fn persist_sensor_events(
         &self,
         producer: &KafkaTopicProducer,
+        pool: Option<Pool<Postgres>>,
         topic: &str,
         experiment_id: &str,
         sensor_events: Vec<EventWrapper>,
@@ -346,6 +359,20 @@ impl Measurement {
         let sleep_handle = tokio::spawn(async move {
             time::sleep(Duration::from_millis(period_millis)).await;
         });
+        if let (Some(pool), Some(_)) = (pool, &self.notification_type) {
+            let experiment_id = experiment_id.to_string();
+            let measurement_id = self.measurement_id.clone();
+
+            tokio::spawn(async move {
+                database::insert_ground_truth(
+                    &pool,
+                    experiment_id.as_str(),
+                    measurement_id.as_str(),
+                )
+                .await
+                .expect("Insert should not fail");
+            });
+        }
         let span = Span::current();
         let mut handles: Vec<JoinHandle<_>> = sensor_events
             .into_iter()

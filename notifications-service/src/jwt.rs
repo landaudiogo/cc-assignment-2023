@@ -8,6 +8,7 @@ pub struct Claims {
 }
 
 impl Claims {
+    #[allow(dead_code)]
     pub fn new(subject: String) -> Self {
         Self {
             exp: 1704129818,
@@ -16,6 +17,7 @@ impl Claims {
     }
 }
 
+#[allow(dead_code)]
 pub fn encode(claims: &Claims) -> Result<String, jsonwebtoken::errors::Error> {
     jsonwebtoken::encode(
         &Header::new(Algorithm::RS256),
@@ -24,6 +26,7 @@ pub fn encode(claims: &Claims) -> Result<String, jsonwebtoken::errors::Error> {
     )
 }
 
+#[allow(dead_code)]
 pub fn decode(token: &str) -> Result<TokenData<Claims>, jsonwebtoken::errors::Error> {
     jsonwebtoken::decode::<Claims>(
         &token,

@@ -1,12 +1,19 @@
 use ::time::{format_description, UtcOffset};
 use clap::{command, value_parser, Arg, ArgAction, ArgMatches};
+use dotenv;
 use futures::future;
+use sqlx::{
+    postgres::{PgPoolOptions, Postgres},
+    Pool,
+};
+use std::env;
 use tokio::time::{self as tktime, Duration};
-use tracing::{span, Instrument, Level};
+use tracing::{info, span, Instrument, Level};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::{filter::LevelFilter, fmt::time::OffsetTime, prelude::*};
 
 mod config;
+mod database;
 mod events;
 mod simulator;
 mod time;
@@ -15,7 +22,7 @@ use config::ConfigFile;
 use events::KafkaTopicProducer;
 use simulator::{Experiment, ExperimentConfiguration, TempRange};
 
-async fn run_single_experiment(mut matches: ArgMatches) {
+async fn run_single_experiment(mut matches: ArgMatches, pool: Option<Pool<Postgres>>) {
     let topic_producer = KafkaTopicProducer::new(
         &matches
             .remove_one::<String>("broker-list")
@@ -60,11 +67,16 @@ async fn run_single_experiment(mut matches: ArgMatches) {
         "experiment",
         experiment_id = experiment_config.experiment_id
     );
-    let mut experiment = Experiment::new(start_temperature, experiment_config, topic_producer);
+    let mut experiment =
+        Experiment::new(start_temperature, experiment_config, topic_producer, pool);
     experiment.run().instrument(span).await;
 }
 
-async fn run_multiple_experiments(mut matches: ArgMatches, config_file: &str) {
+async fn run_multiple_experiments(
+    mut matches: ArgMatches,
+    config_file: &str,
+    pool: Option<Pool<Postgres>>,
+) {
     let topic_producer = KafkaTopicProducer::new(
         &matches
             .remove_one::<String>("broker-list")
@@ -73,7 +85,6 @@ async fn run_multiple_experiments(mut matches: ArgMatches, config_file: &str) {
 
     let config = ConfigFile::from_file(config_file);
     let mut handles = vec![];
-
     for mut entry in config.0 {
         let start_temperature = entry.start_temperature;
         let start_offset = entry.start_time;
@@ -92,12 +103,13 @@ async fn run_multiple_experiments(mut matches: ArgMatches, config_file: &str) {
             "experiment",
             experiment_id = experiment_config.experiment_id
         );
+        let pool = pool.clone();
         handles.push(tokio::spawn(
             async move {
                 tktime::sleep(Duration::from_millis(start_offset * 1000)).await;
 
                 let mut experiment =
-                    Experiment::new(start_temperature, experiment_config, topic_producer);
+                    Experiment::new(start_temperature, experiment_config, topic_producer, pool);
                 experiment.run().await;
             }
             .instrument(span),
@@ -228,12 +240,28 @@ fn configure_cli() -> ArgMatches {
 
 #[tokio::main]
 async fn main() {
+    dotenv::from_filename("experiment-producer/.env").expect(".env file should exist");
     let _guard = configure_tracing();
     let mut matches = configure_cli();
 
+    let pool = match env::var("DATABASE_URL") {
+        Ok(database_url) => {
+            let pool = Some(
+                PgPoolOptions::new()
+                    .max_connections(5)
+                    .connect(&database_url)
+                    .await
+                    .expect("Unable to connect to database provided in DATABASE_URL"),
+            );
+            info!("Created connection pool to database");
+            pool
+        }
+        _ => None,
+    };
+
     if let Some(config_file) = matches.remove_one::<String>("config-file") {
-        run_multiple_experiments(matches, &config_file).await;
+        run_multiple_experiments(matches, &config_file, pool).await;
     } else {
-        run_single_experiment(matches).await;
+        run_single_experiment(matches, pool).await;
     }
 }

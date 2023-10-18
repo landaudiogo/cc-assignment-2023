@@ -60,7 +60,8 @@ impl Api {
             rng.gen_range(0.0..1.0)
         };
         if random_value < 0.1 {
-            PlainText(serde_json::to_string(&experiment.measurements).unwrap()) } else if random_value < 0.2 {
+            PlainText(serde_json::to_string(&experiment.measurements).unwrap())
+        } else if random_value < 0.2 {
             PlainText(String::from("invalid serialized data"))
         } else {
             PlainText(serde_json::to_string(&measurements).unwrap())
