@@ -45,6 +45,7 @@ pub struct Host {
 pub struct RequestorConfiguration {
     lag: u8,
     retries: u8,
+    max_in_flight: u16,
 }
 
 impl From<&mut ArgMatches> for RequestorConfiguration {
@@ -54,13 +55,20 @@ impl From<&mut ArgMatches> for RequestorConfiguration {
             retries: args
                 .remove_one::<u8>("requestor-retries")
                 .expect("Required"),
+            max_in_flight: args
+                .remove_one::<u16>("requestor-max-in-flight")
+                .expect("Required"),
         }
     }
 }
 
 impl Default for RequestorConfiguration {
     fn default() -> Self {
-        Self { lag: 5, retries: 2 }
+        Self {
+            lag: 5,
+            retries: 2,
+            max_in_flight: 50,
+        }
     }
 }
 
@@ -304,7 +312,7 @@ impl Requestor {
                 return None;
             })
             .boxed()
-            .buffer_unordered(50)
+            .buffer_unordered(self.config.max_in_flight as usize)
             .for_each(|response| async move {
                 match response {
                     None => {

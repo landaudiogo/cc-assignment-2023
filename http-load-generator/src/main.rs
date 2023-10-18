@@ -78,6 +78,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .value_parser(value_parser!(u8))
             .help("The number of retries in case a request fails due to a server error")
         )
+        .arg(Arg::new("requestor-max-in-flight")
+            .required(false)
+            .long("requestor-max-in-flight")
+            .action(ArgAction::Set)
+            .default_value("50")
+            .value_parser(value_parser!(u16))
+            .help("The maximum number of connections to a host.")
+        )
         .get_matches();
 
     let consume_config = ConsumeConfiguration::from(&mut matches);
