@@ -6,7 +6,7 @@ use prometheus_client::{
 };
 use std::sync::Mutex;
 
-use crate::requests::ResponseError;
+use crate::request::ResponseError;
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
 pub struct RequestRateLabels {

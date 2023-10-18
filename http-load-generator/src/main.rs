@@ -8,7 +8,7 @@ mod experiment;
 mod generator;
 mod metric;
 mod receiver;
-mod requests;
+mod request;
 
 use crate::consume::{Consume, ConsumeConfiguration};
 use crate::receiver::{ExperimentReceiver, ExperimentReceiverConfig};

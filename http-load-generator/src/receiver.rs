@@ -12,7 +12,7 @@ use tokio::{
 use crate::experiment::ExperimentDocument;
 use crate::generator::{self, APIQuery};
 use crate::metric::{MetricServer, Metrics};
-use crate::requests::{Host, Requestor, RequestorConfiguration};
+use crate::request::{Host, Requestor, RequestorConfiguration};
 
 #[derive(Deserialize)]
 pub struct ExperimentReceiverConfig {
