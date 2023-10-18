@@ -11,6 +11,7 @@ mod receiver;
 mod requests;
 
 use crate::consume::{Consume, ConsumeConfiguration};
+use crate::receiver::{ExperimentReceiverConfig, ExperimentReceiver};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -55,18 +56,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .value_parser(value_parser!(u8))
             .help("Time the consumer should wait before forwarding the experiment to the receiver")
         )
+        .arg(Arg::new("hosts-file")
+            .required(true)
+            .long("hosts-file")
+            .action(ArgAction::Set)
+            .help("The file containing the list of hosts to be queried")
+        )
         .get_matches();
 
     let consume_config = ConsumeConfiguration::from(&mut matches);
     let consume = Consume::new(consume_config);
 
     let mut handles = vec![];
-    let (tx, rx) = mpsc::channel(1000);
+    let (experiment_tx, experiment_rx) = mpsc::channel(1000);
+    let receiver_config = ExperimentReceiverConfig::from(&mut matches);
+    let receiver = ExperimentReceiver::new(receiver_config, experiment_rx);
+    handles.push(tokio::spawn(receiver.start()));
     handles.push(tokio::spawn(async move {
-        receiver::start(rx).await;
-    }));
-    handles.push(tokio::spawn(async move {
-        consume.start(tx).await;
+        consume.start(experiment_tx).await;
     }));
     future::join_all(handles).await;
     Ok(())

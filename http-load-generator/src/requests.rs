@@ -1,6 +1,7 @@
 use async_broadcast::Receiver;
 use futures::{stream, StreamExt};
 use reqwest::{Client, Error, RequestBuilder, Response};
+use serde::Deserialize;
 use std::{
     sync::Arc,
     time::{Duration as stdDuration, Instant},
@@ -33,18 +34,14 @@ impl std::fmt::Display for ResponseError {
 
 impl std::error::Error for ResponseError {}
 
+#[derive(Deserialize, Clone)]
 pub struct Host {
     host_name: String,
     base_url: String,
 }
 
-impl Host {
-    pub fn new(host_name: &str, base_url: &str) -> Self {
-        Self {
-            host_name: host_name.into(),
-            base_url: base_url.into(),
-        }
-    }
+pub struct RequestorConfiguration {
+    
 }
 
 pub struct Requestor {
