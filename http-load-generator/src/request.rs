@@ -62,16 +62,6 @@ impl From<&mut ArgMatches> for RequestorConfiguration {
     }
 }
 
-impl Default for RequestorConfiguration {
-    fn default() -> Self {
-        Self {
-            lag: 5,
-            retries: 2,
-            max_in_flight: 50,
-        }
-    }
-}
-
 pub struct Requestor {
     host: Host,
     batch_rx: Receiver<Arc<Vec<APIQuery>>>,

@@ -86,6 +86,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .value_parser(value_parser!(u16))
             .help("The maximum number of connections to a host.")
         )
+        .arg(Arg::new("min-batch-size")
+            .required(false)
+            .long("min-batch-size")
+            .action(ArgAction::Set)
+            .default_value("100")
+            .value_parser(value_parser!(u16))
+            .help("The minimum number of queries that has to be performed per second to each host.")
+        )
+        .arg(Arg::new("max-batch-size")
+            .required(false)
+            .long("max-batch-size")
+            .action(ArgAction::Set)
+            .default_value("200")
+            .value_parser(value_parser!(u16))
+            .help("The maximum number of queries that can be performed per second to each host.")
+        )
         .get_matches();
 
     let consume_config = ConsumeConfiguration::from(&mut matches);

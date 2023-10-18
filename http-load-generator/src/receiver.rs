@@ -2,7 +2,6 @@ use async_broadcast::broadcast;
 use clap::ArgMatches;
 use futures::future;
 use rand::Rng;
-use serde::Deserialize;
 use std::{fs, sync::Arc};
 use tokio::{
     sync::{mpsc::Receiver, RwLock},
@@ -14,32 +13,45 @@ use crate::generator::{self, APIQuery};
 use crate::metric::{MetricServer, Metrics};
 use crate::request::{Host, Requestor, RequestorConfiguration};
 
-#[derive(Deserialize)]
-pub struct ExperimentReceiverConfig {
-    hosts: Vec<Host>,
-
-    #[serde(skip)]
-    requestor_config: RequestorConfiguration,
+pub struct BatchSize {
+    max: u16,
+    min: u16,
 }
 
-impl ExperimentReceiverConfig {
-    pub fn from_file(file: &str, requestor_config: RequestorConfiguration) -> Self {
-        let content =
-            fs::read_to_string(file).expect(format!("File `{}` should exist", file).as_str());
-        let hosts: Vec<Host> =
-            serde_json::from_str(content.as_str()).expect("Could not deserialize config file");
-        Self {
-            hosts,
-            requestor_config: requestor_config,
+impl BatchSize {
+    pub fn new(min: u16, max: u16) -> Option<Self> {
+        if min > max {
+            None
+        } else {
+            Some(Self { min, max })
         }
     }
+}
+
+pub struct ExperimentReceiverConfig {
+    hosts: Vec<Host>,
+    requestor_config: RequestorConfiguration,
+    batch_size: BatchSize,
 }
 
 impl From<&mut ArgMatches> for ExperimentReceiverConfig {
     fn from(args: &mut ArgMatches) -> Self {
         let file = args.remove_one::<String>("hosts-file").expect("Required");
+        let content =
+            fs::read_to_string(&file).expect(format!("File `{}` should exist", file).as_str());
+        let hosts: Vec<Host> =
+            serde_json::from_str(content.as_str()).expect("Could not deserialize config file");
+        let batch_size = BatchSize::new(
+            args.remove_one::<u16>("min-batch-size").expect("Required"),
+            args.remove_one::<u16>("max-batch-size").expect("Required"),
+        )
+        .expect("min-batch-size should be smaller than max-batch-size");
         let requestor_config = RequestorConfiguration::from(args);
-        Self::from_file(file.as_str(), requestor_config)
+        Self {
+            requestor_config,
+            hosts,
+            batch_size,
+        }
     }
 }
 
@@ -116,7 +128,7 @@ impl ExperimentReceiver {
             }));
             let batch_size = {
                 let mut rng = rand::thread_rng();
-                rng.gen_range(100..200)
+                rng.gen_range(self.config.batch_size.min..self.config.batch_size.max)
             };
             handles.append(
                 &mut (0..60)

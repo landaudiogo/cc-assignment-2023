@@ -45,7 +45,7 @@ async fn generate_temperature_query(experiment: Arc<RwLock<ExperimentDocument>>)
 /// executors pop from the queue (FIFO).
 pub async fn generate(
     experiments: Arc<RwLock<Vec<Arc<RwLock<ExperimentDocument>>>>>,
-    batch_size: usize,
+    batch_size: u16,
     tx: Sender<Arc<Vec<APIQuery>>>,
 ) {
     let experiments = experiments.read().await;
