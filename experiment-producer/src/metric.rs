@@ -45,7 +45,7 @@ impl MetricServer {
         let state = Data::new(Mutex::new(self.registry));
         let server =
             HttpServer::new(move || App::new().service(get_metrics).app_data(state.clone()))
-                .bind(("127.0.0.1", 8080))
+                .bind(("0.0.0.0", 3001))
                 .unwrap()
                 .run();
         tokio::spawn(server)

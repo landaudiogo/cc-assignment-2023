@@ -38,8 +38,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let metrics = Metrics::new();
     let mut registry = <Registry>::default();
     registry.register(
-        "event_count",
-        "Count of events produced",
+        "response_count",
+        "Count of response",
         metrics.response_count.clone(),
     );
     let state = Arc::new(Mutex::new(registry));

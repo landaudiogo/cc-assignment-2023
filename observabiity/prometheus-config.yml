@@ -1,0 +1,21 @@
+global:
+  scrape_interval: 1m
+  scrape_timeout: 10s
+
+scrape_configs:
+
+  - job_name: notifications-service
+    scrape_interval: 1s
+    metrics_path: /api/metrics
+    static_configs:
+    - targets: ['notifications-service-host:3000']
+
+  - job_name: experiment-producer
+    scrape_interval: 1s
+    static_configs:
+    - targets: ['experiment-producer-host:3001']
+
+  - job_name: http-load-generator
+    scrape_interval: 1s
+    static_configs:
+    - targets: ['http-load-generator-host:3002']

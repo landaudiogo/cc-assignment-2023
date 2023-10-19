@@ -159,7 +159,7 @@ async fn main() {
         .await
     }));
     handles.push(tokio::spawn(async move {
-        Server::new(TcpListener::bind("127.0.0.1:3000"))
+        Server::new(TcpListener::bind("0.0.0.0:3003"))
             .run(app)
             .await
             .unwrap()

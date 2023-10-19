@@ -1,0 +1,27 @@
+version: "3.5"
+services:
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - ./prometheus-config.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    ports: 
+      - 3008:9090
+    extra_hosts: 
+      - host.docker.internal:host-gateway
+      - experiment-producer-host:${EXPERIMENT_PRODUCER_HOST}
+      - notifications-service-host:${NOTIFICATIONS_SERVICE_HOST}
+      - http-load-generator-host:${HTTP_LOAD_GENERATOR_HOST}
+
+  grafana: 
+    image: grafana/grafana-enterprise
+    ports: 
+      - 3009:3000
+    volumes: 
+      - grafana-storage:/var/lib/grafana
+    env_file: 
+      ./grafana.env
+
+volumes:
+  prometheus-data:
+  grafana-storage:
