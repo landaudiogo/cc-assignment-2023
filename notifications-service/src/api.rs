@@ -5,13 +5,18 @@ use poem_openapi::{
     payload::{Json, PlainText},
     ApiResponse, Enum, Object, OpenApi,
 };
+use prometheus_client::{encoding::text, registry::Registry};
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Postgres};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    sync::{Arc, Mutex},
+    time::{SystemTime, UNIX_EPOCH},
+};
 use tracing::info;
 
-use crate::jwt;
+use crate::metric::{Metrics, ResponseCountLabels};
 use crate::store;
+use crate::{jwt, metric::ResponseType};
 
 #[derive(Debug, Clone)]
 pub struct SecretKey(pub String);
@@ -74,15 +79,15 @@ impl NotifyBody {
     }
 }
 
-#[derive(ApiResponse)]
-enum NotifyResponse {
+#[derive(ApiResponse, Debug)]
+pub enum NotifyResponse {
     /// Notification is successfully created
     #[oai(status = 200)]
     Ok(PlainText<String>),
 }
 
-#[derive(ApiResponse)]
-enum NotifyErrorResponse {
+#[derive(ApiResponse, Debug)]
+pub enum NotifyErrorResponse {
     /// Request could not be processed
     #[oai(status = 400)]
     BadRequest(PlainText<String>),
@@ -153,34 +158,97 @@ impl Api {
         data_secret_key: Data<&SecretKey>,
         pool: Data<&Option<Pool<Postgres>>>,
         body: Json<NotifyBody>,
+        metrics: Data<&Metrics>,
         token: Query<Option<String>>,
     ) -> Result<NotifyResponse, NotifyErrorResponse> {
         let pool = pool.0;
         let secret_key = data_secret_key.0;
         let key: &[u8] = secret_key.0.as_bytes();
         let body = body.0;
+        let metrics = metrics.0;
+        let mut subject: Option<String> = None;
 
-        let hash_data = HashData::decrypt(key, &body.cipher_data)?;
-        body.validate_body(&hash_data)?;
+        if let Some(token) = token.0 {
+            let claims = jwt::decode(&token)
+                .map_err(|e| {
+                    self.update_counters(
+                        metrics,
+                        subject.as_ref().map(|x| x.as_str()),
+                        ResponseType::from(&e),
+                    );
+                    e
+                })?
+                .claims;
+            subject = Some(claims.sub);
+        }
+
+        let hash_data = HashData::decrypt(key, &body.cipher_data).map_err(|e| {
+            self.update_counters(
+                metrics,
+                subject.as_ref().map(|subject| subject.as_str()),
+                ResponseType::from(&e),
+            );
+            e
+        })?;
+        body.validate_body(&hash_data).map_err(|e| {
+            self.update_counters(
+                metrics,
+                subject.as_ref().map(|subject| subject.as_str()),
+                ResponseType::from(&e),
+            );
+            e
+        })?;
         let latency = compute_latency(hash_data.timestamp);
 
-        if let (Some(token), Some(pool)) = (token.0, pool.as_ref()) {
-            let claims = jwt::decode(&token)?.claims;
+        if let (Some(subject), Some(pool)) = (subject.as_ref(), pool.as_ref()) {
             store::insert_latency(
                 pool,
-                &claims.sub,
+                subject,
                 &body.experiment_id,
                 &body.measurement_id,
                 &latency,
             )
-            .await?;
+            .await
+            .map_err(|e| {
+                self.update_counters(metrics, Some(subject.as_str()), ResponseType::from(&e));
+                e
+            })?;
         }
+
+        self.update_counters(
+            metrics,
+            subject.as_ref().map(|x| x.as_str()),
+            ResponseType::Ok,
+        );
 
         info!(
             "measurement_id: {}\tlatency: {}s",
             body.measurement_id, latency
         );
         Ok(NotifyResponse::Ok(PlainText(format!("{}", latency))))
+    }
+
+    #[oai(path = "/metrics", method = "get")]
+    async fn get_metrics(&self, state: Data<&Arc<Mutex<Registry>>>) -> PlainText<String> {
+        let state = state.0.lock().unwrap();
+        let mut body = String::new();
+        text::encode(&mut body, &state).unwrap();
+        PlainText(body)
+    }
+
+    fn update_counters(
+        &self,
+        metrics: &Metrics,
+        subject: Option<&str>,
+        response_type: ResponseType,
+    ) {
+        metrics
+            .response_count
+            .get_or_create(&ResponseCountLabels {
+                group: subject.map(|subject| subject.to_string()),
+                response_type,
+            })
+            .inc();
     }
 }
 

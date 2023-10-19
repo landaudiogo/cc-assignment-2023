@@ -16,7 +16,7 @@ pub async fn insert_latency(
             ON CONFLICT
                 DO NOTHING;
             ",
-        experiment_id, 
+        experiment_id,
         measurement_id,
         group_id,
         latency,

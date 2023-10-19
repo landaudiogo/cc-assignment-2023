@@ -1,17 +1,22 @@
 use clap::Parser;
 use dotenv;
+use metric::Metrics;
 use poem::{listener::TcpListener, EndpointExt, Route};
 use poem_openapi::OpenApiService;
+use prometheus_client::registry::Registry;
 use sqlx::postgres::PgPoolOptions;
-use std::env;
+use std::{
+    env,
+    sync::{Arc, Mutex},
+};
 use tracing::{info, Level};
 
 mod api;
 mod jwt;
+mod metric;
 mod store;
-use api::Api;
 
-use api::SecretKey;
+use api::{Api, SecretKey};
 
 #[derive(Parser, Debug)]
 struct CliArgs {
@@ -29,6 +34,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let args = CliArgs::parse();
     let secret_key = SecretKey(args.secret_key);
+
+    let metrics = Metrics::new();
+    let mut registry = <Registry>::default();
+    registry.register(
+        "event_count",
+        "Count of events produced",
+        metrics.response_count.clone(),
+    );
+    let state = Arc::new(Mutex::new(registry));
 
     let pool = match env::var("DATABASE_URL") {
         Ok(database_url) => {
@@ -54,6 +68,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .nest("/api", api_service)
         .nest("/", ui)
         .data(secret_key)
+        .data(state)
+        .data(metrics.clone())
         .data(pool);
 
     Ok(poem::Server::new(TcpListener::bind("0.0.0.0:3000"))

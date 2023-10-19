@@ -1793,6 +1793,7 @@ dependencies = [
  "jsonwebtoken",
  "poem",
  "poem-openapi 3.0.2",
+ "prometheus-client",
  "rand",
  "serde",
  "serde_json",
