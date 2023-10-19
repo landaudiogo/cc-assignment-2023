@@ -15,18 +15,25 @@ use tracing_subscriber::{filter::LevelFilter, fmt::time::OffsetTime, prelude::*}
 mod config;
 mod database;
 mod events;
+mod metric;
 mod simulator;
 mod time;
 
 use config::ConfigFile;
 use events::KafkaTopicProducer;
+use metric::{MetricServer, Metrics};
 use simulator::{Experiment, ExperimentConfiguration, TempRange};
 
-async fn run_single_experiment(mut matches: ArgMatches, pool: Option<Pool<Postgres>>) {
+async fn run_single_experiment(
+    mut matches: ArgMatches,
+    pool: Option<Pool<Postgres>>,
+    metrics: Metrics,
+) {
     let topic_producer = KafkaTopicProducer::new(
         &matches
             .remove_one::<String>("broker-list")
             .expect("required"),
+        metrics,
     );
 
     let experiment_config = ExperimentConfiguration::new(
@@ -76,11 +83,13 @@ async fn run_multiple_experiments(
     mut matches: ArgMatches,
     config_file: &str,
     pool: Option<Pool<Postgres>>,
+    metrics: Metrics,
 ) {
     let topic_producer = KafkaTopicProducer::new(
         &matches
             .remove_one::<String>("broker-list")
             .expect("required"),
+        metrics,
     );
 
     let config = ConfigFile::from_file(config_file);
@@ -259,9 +268,17 @@ async fn main() {
         _ => None,
     };
 
+    let metrics = Metrics::new();
+    let metric_server = MetricServer::new(metrics.clone());
+    let server_handle = metric_server.start();
+
     if let Some(config_file) = matches.remove_one::<String>("config-file") {
-        run_multiple_experiments(matches, &config_file, pool).await;
+        run_multiple_experiments(matches, &config_file, pool, metrics).await
     } else {
-        run_single_experiment(matches, pool).await;
+        run_single_experiment(matches, pool, metrics).await
     }
+    server_handle
+        .await
+        .expect("Join should not fail")
+        .expect("Server shouldn't fail");
 }

@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use event_hash::{HashData, NotificationType};
 
+use crate::metric::{EventCountLabels, Metrics};
 use crate::simulator::{self, ExperimentStage, IterMut, Measurement, TempRange, TemperatureSample};
 use crate::time;
 
@@ -275,10 +276,11 @@ pub struct RecordData<K: ToBytes, T: ToBytes> {
 #[derive(Clone)]
 pub struct KafkaTopicProducer {
     producer: FutureProducer, // partition: Option<usize>
+    metrics: Metrics,
 }
 
 impl KafkaTopicProducer {
-    pub fn new(brokers: &str) -> Self {
+    pub fn new(brokers: &str, metrics: Metrics) -> Self {
         let producer: FutureProducer = ClientConfig::new()
             .set("bootstrap.servers", brokers)
             .set("message.timeout.ms", "5000")
@@ -297,7 +299,22 @@ impl KafkaTopicProducer {
         // call to ClientConfig::new()
         span!(Level::INFO, "");
 
-        KafkaTopicProducer { producer }
+        KafkaTopicProducer { producer, metrics }
+    }
+
+    fn update_count<K>(&self, topic: &str, key: Option<&K>)
+    where
+        K: ToBytes,
+    {
+        self.metrics
+            .event_count
+            .get_or_create(&EventCountLabels {
+                key: key.map(|key| {
+                    String::from_utf8(key.to_bytes().to_vec()).expect("Key should be utf-8 encoded")
+                }),
+                topic: topic.to_string(),
+            })
+            .inc();
     }
 
     pub async fn send_event<'a, K, T>(
@@ -325,6 +342,7 @@ impl KafkaTopicProducer {
         if record.key.is_some() {
             future_record = future_record.key(record.key.as_ref().unwrap());
         }
+        self.update_count(topic, record.key.as_ref());
 
         self.producer
             .send(future_record, Duration::from_secs(0))
