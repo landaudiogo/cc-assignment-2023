@@ -3,7 +3,6 @@ use event_hash::DecryptError;
 use prometheus_client::{
     encoding::{EncodeLabelSet, EncodeLabelValue},
     metrics::{counter::Counter, family::Family},
-    registry::Registry,
 };
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]

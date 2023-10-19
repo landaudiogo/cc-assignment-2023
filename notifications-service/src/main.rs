@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let metrics = Metrics::new();
     let mut registry = <Registry>::default();
     registry.register(
-        "response_count",
+        "notifications_service_response_count",
         "Count of response",
         metrics.response_count.clone(),
     );

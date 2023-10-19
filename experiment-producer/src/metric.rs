@@ -34,7 +34,7 @@ impl MetricServer {
     pub fn new(metrics: Metrics) -> Self {
         let mut registry = <Registry>::default();
         registry.register(
-            "event_count",
+            "experiment_producer_event_count",
             "Count of events produced",
             metrics.event_count.clone(),
         );

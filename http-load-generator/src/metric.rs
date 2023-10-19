@@ -75,22 +75,22 @@ impl MetricServer {
     pub fn new(metrics: Metrics) -> Self {
         let mut registry = <Registry>::default();
         registry.register(
-            "response_count",
+            "http_load_generator_response_count",
             "Count of response",
             metrics.response_count.clone(),
         );
         registry.register(
-            "response_rtt_histogram",
+            "http_load_generator_response_rtt_histogram",
             "Response round trip time in seconds",
             metrics.response_time_histogram.clone(),
         );
         registry.register(
-            "target_request_rate",
+            "http_load_generator_target_request_rate",
             "The target request rate at which a host is being queried",
             metrics.target_request_rate.clone(),
         );
         registry.register(
-            "effective_request_rate",
+            "http_load_generator_effective_request_rate",
             "Effective request rate at which the host is being queried",
             metrics.effective_request_rate.clone(),
         );
