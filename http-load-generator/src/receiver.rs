@@ -33,6 +33,7 @@ pub struct ExperimentReceiverConfig {
     requestor_config: RequestorConfiguration,
     batch_size: BatchSize,
     stable_rate: u16,
+    num_generations: u8,
 }
 
 impl From<&mut ArgMatches> for ExperimentReceiverConfig {
@@ -50,12 +51,16 @@ impl From<&mut ArgMatches> for ExperimentReceiverConfig {
         let stable_rate = args
             .remove_one::<u16>("stable-rate-duration")
             .expect("Required");
+        let num_generations = args
+            .remove_one::<u8>("num-generations")
+            .expect("Required");
         let requestor_config = RequestorConfiguration::from(args);
         Self {
             requestor_config,
             hosts,
             batch_size,
             stable_rate,
+            num_generations,
         }
     }
 }
@@ -123,7 +128,7 @@ impl ExperimentReceiver {
         // Each iteration receives messages and generates load for the next minute
         // Sleep for 60 seconds after generating all the requests, if there are new experiments, read
         // them and generate the load, otherwise just generate the load with the experiments available.
-        loop {
+        for _ in 0..self.config.num_generations {
             self.receive_experiments().await;
             let mut handles = vec![];
             handles.push(tokio::spawn(async move {

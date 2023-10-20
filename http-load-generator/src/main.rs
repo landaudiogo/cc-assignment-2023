@@ -110,19 +110,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .value_parser(value_parser!(u16))
             .help("The number of seconds during which the rate at which the queries are performed to each host remains stable.")
         )
+        .arg(Arg::new("num-generations")
+            .required(true)
+            .long("num-generations")
+            .action(ArgAction::Set)
+            .value_parser(value_parser!(u8))
+            .help("The number of generate iterations to perform.\n\nE.g.:\nIf `--num-generations 2` and `--stable-rate duration 60`, then `60*2` batches of queries would be performed.")
+        )
         .get_matches();
 
     let consume_config = ConsumeConfiguration::from(&mut matches);
     let consume = Consume::new(consume_config);
 
-    let mut handles = vec![];
     let (experiment_tx, experiment_rx) = mpsc::channel(1000);
     let receiver_config = ExperimentReceiverConfig::from(&mut matches);
     let receiver = ExperimentReceiver::new(receiver_config, experiment_rx);
-    handles.push(tokio::spawn(receiver.start()));
-    handles.push(tokio::spawn(async move {
+    let receiver_handle = tokio::spawn(receiver.start());
+    tokio::spawn(async move {
         consume.start(experiment_tx).await;
-    }));
-    future::join_all(handles).await;
+    });
+    receiver_handle.await.expect("Join should not fail");
     Ok(())
 }

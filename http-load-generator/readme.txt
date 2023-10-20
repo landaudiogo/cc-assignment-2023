@@ -8,7 +8,8 @@ E.g.: cargo run -p http-load-generator -- \
     --hosts-file ./http-load-generator/hosts.json \
     --requestor-lag 0 \
     --requestor-retries 0 \
-    --stable-rate-duration 10
+    --stable-rate-duration 60 \
+    --duration 5
 
 Options:
       --secret-key <secret-key>
@@ -35,8 +36,12 @@ Options:
           The maximum number of queries that can be performed per second to each host. [default: 200]
       --stable-rate-duration <stable-rate-duration>
           The number of seconds during which the rate at which the queries are performed to each host remains stable. [default: 60]
+      --num-generations <num-generations>
+          The number of generate iterations to perform.
+
+          E.g.:
+          If `--num-generations 2` and `--stable-rate duration 60`, then `60*2` batches of queries would be performed.
   -h, --help
           Print help
   -V, --version
           Print version
-
