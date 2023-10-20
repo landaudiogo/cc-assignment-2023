@@ -3,8 +3,8 @@ use sqlx::{Pool, Postgres};
 pub async fn insert_latency(
     pool: &Pool<Postgres>,
     group_id: &str,
-    measurement_id: &str,
     experiment_id: &str,
+    measurement_id: &str,
     latency: &f64,
 ) -> Result<(), sqlx::Error> {
     sqlx::query!(
