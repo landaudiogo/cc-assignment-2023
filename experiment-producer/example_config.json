@@ -5,20 +5,11 @@
         "num_sensors": 2,
         "sample_rate": 1000,
         "start_temperature": 0,
+        "stabilization_samples": 10,
+        "carry_out_samples": 20,
         "temp_range": {
-            "lower_threshold": 10,
-            "upper_threshold": 20
-        }
-    },
-    {
-        "start_time": 30,
-        "researcher": "d.landau@uu.nl",
-        "num_sensors": 4,
-        "sample_rate": 1000,
-        "start_temperature": 0,
-        "temp_range": {
-            "lower_threshold": 15,
-            "upper_threshold": 25
+            "lower_threshold": 5,
+            "upper_threshold": 15
         }
     }
 ]

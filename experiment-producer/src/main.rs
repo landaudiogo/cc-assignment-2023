@@ -270,15 +270,11 @@ async fn main() {
 
     let metrics = Metrics::new();
     let metric_server = MetricServer::new(metrics.clone());
-    let server_handle = metric_server.start();
+    metric_server.start();
 
     if let Some(config_file) = matches.remove_one::<String>("config-file") {
         run_multiple_experiments(matches, &config_file, pool, metrics).await
     } else {
         run_single_experiment(matches, pool, metrics).await
     }
-    server_handle
-        .await
-        .expect("Join should not fail")
-        .expect("Server shouldn't fail");
 }
