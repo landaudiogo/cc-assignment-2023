@@ -21,6 +21,8 @@ services:
       - grafana-storage:/var/lib/grafana
     env_file: 
       ./grafana.env
+    extra_hosts: 
+      - host.docker.internal:host-gateway
 
 volumes:
   prometheus-data:
