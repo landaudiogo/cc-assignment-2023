@@ -10,6 +10,7 @@ use poem_openapi::{payload::PlainText, OpenApi, OpenApiService};
 use rand::Rng;
 use serde::Deserialize;
 use std::sync::Arc;
+use tokio::time::{self, Duration};
 
 mod consumer;
 
@@ -42,6 +43,7 @@ impl Api {
         map: Data<&Arc<DashMap<String, ExperimentDocument>>>,
         params: Query<TemperatureQueryParams>,
     ) -> PlainText<String> {
+        time::sleep(Duration::from_millis(100)).await;
         let map = map.0;
         let TemperatureQueryParams {
             experiment_id,
@@ -74,6 +76,7 @@ impl Api {
         map: Data<&Arc<DashMap<String, ExperimentDocument>>>,
         params: Query<OutOfBoundsQueryParams>,
     ) -> PlainText<String> {
+        time::sleep(Duration::from_millis(100)).await;
         let OutOfBoundsQueryParams { experiment_id } = params.0;
         let experiment = map
             .get(&experiment_id)
