@@ -19,3 +19,32 @@ scrape_configs:
     scrape_interval: 1s
     static_configs:
     - targets: ['http-load-generator-host:3002']
+
+  # Get metrics from other prometheus servers
+  - job_name: infrastructure-costs
+    scrape_interval: 15s
+    metrics_path: '/federate'
+
+    params:
+      'match[]':
+        - '{__name__="node_cpu_seconds_total"}'
+        - '{__name__="node_memory_MemTotal_bytes"}'
+        - '{__name__="node_memory_MemAvailable_bytes"}'
+
+    static_configs:
+    - targets: 
+      - 'group1:3005'
+      - 'group2:3005'
+      - 'group3:3005'
+      - 'group4:3005'
+      - 'group5:3005'
+      - 'group6:3005'
+      - 'group7:3005'
+      - 'group8:3005'
+      - 'group9:3005'
+      - 'group10:3005'
+      - 'group11:3005'
+      - 'group12:3005'
+      - 'group13:3005'
+      - 'group14:3005'
+      - 'landau:3005'

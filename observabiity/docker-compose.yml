@@ -12,6 +12,21 @@ services:
       - experiment-producer-host:${EXPERIMENT_PRODUCER_HOST}
       - notifications-service-host:${NOTIFICATIONS_SERVICE_HOST}
       - http-load-generator-host:${HTTP_LOAD_GENERATOR_HOST}
+      - group1:${GROUP1_HOST}
+      - group2:${GROUP2_HOST}
+      - group3:${GROUP3_HOST}
+      - group4:${GROUP4_HOST}
+      - group5:${GROUP5_HOST}
+      - group6:${GROUP6_HOST}
+      - group7:${GROUP7_HOST}
+      - group8:${GROUP8_HOST}
+      - group9:${GROUP9_HOST}
+      - group10:${GROUP10_HOST}
+      - group11:${GROUP11_HOST}
+      - group12:${GROUP12_HOST}
+      - group13:${GROUP13_HOST}
+      - group14:${GROUP14_HOST}
+      - landau:${LANDAU_HOST}
 
   grafana: 
     image: grafana/grafana-enterprise
