@@ -8,4 +8,5 @@ members = [
     "event-hash",
     "http-load-generator",
     "test-to-api",
+    "notifier",
 ]

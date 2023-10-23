@@ -1804,6 +1804,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "notifier"
+version = "0.1.0"
+dependencies = [
+ "apache-avro",
+ "clap",
+ "event-hash",
+ "rand",
+ "rdkafka",
+ "reqwest",
+ "serde",
+ "tokio",
+]
+
+[[package]]
 name = "nu-ansi-term"
 version = "0.46.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
