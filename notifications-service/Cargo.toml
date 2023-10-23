@@ -2,6 +2,7 @@
 name = "notifications-service"
 version = "0.1.0"
 edition = "2021"
+default-run = "notifications-service"
 
 [[bin]]
 name = "generate-jwt-token"
