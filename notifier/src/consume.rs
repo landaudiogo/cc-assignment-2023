@@ -39,6 +39,7 @@ pub struct ConsumeConfiguration {
     group_id: String,
     brokers: String,
     topic: String,
+    notifications_host: String,
 }
 
 impl From<&mut ArgMatches> for ConsumeConfiguration {
@@ -47,12 +48,14 @@ impl From<&mut ArgMatches> for ConsumeConfiguration {
         let brokers = args.remove_one::<String>("broker-list").expect("Required");
         let group_id = args.remove_one::<String>("group-id").expect("Required");
         let topic = args.remove_one::<String>("topic").expect("Required");
+        let notifications_host = args.remove_one::<String>("notifications-host").expect("Required");
 
         ConsumeConfiguration {
             secret_key,
             group_id,
             brokers,
             topic,
+            notifications_host,
         }
     }
 }
@@ -143,7 +146,7 @@ impl Consume {
                                 time::sleep(Duration::from_millis(sleep_secs*1000)).await;
                                 map.insert("notification_type", "OutOfRange");
                                 self.client
-                                    .post("http://localhost:3000/api/notify")
+                                    .post(format!("http://{}:3000/api/notify", self.config.notifications_host))
                                     .query(&[("token", "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJleHAiOjE3MDQxMjk4MTgsInN1YiI6ImxhbmRhdSJ9.Gvdz0IuwRPd0BloUGS9vWbRY97ZAB-HC43Fora-CFV-sejq8aNr-WNDd0mOuUP1XvgDO7gaiGv9UkOtlRBEL_TlWizDmS2buTrKWCu2C6x8U1_NR5dfjF0sKdADA4DSLxxTwiuImXNHbtkhbZjbzpMn5CYlkuydbn2Rlg4lNAV91k2zWaM4op1IQO2g8iWmK_vgOX-iKOckNfKPafRF1mHHAg553ZHX8dTc_Dnfu31rDguXZt9mtN5Y9QZsBKd99u0A5vaDsaJjLGcfgSoQB1pwI3T8CVj4V5ppiTJLo8fU-2b7Q6kQ-vARV6lWZbmPhTAXwU7ZKDloRCHUopv1U2A")])
                                     .json(&map)
                                     .send()
@@ -159,7 +162,7 @@ impl Consume {
                                 time::sleep(Duration::from_millis(sleep_secs*1000)).await;
                                 map.insert("notification_type", "Stabilized");
                                 self.client
-                                    .post("http://localhost:3000/api/notify")
+                                    .post(format!("http://{}:3000/api/notify", self.config.notifications_host))
                                     .query(&[("token", "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJleHAiOjE3MDQxMjk4MTgsInN1YiI6ImxhbmRhdSJ9.Gvdz0IuwRPd0BloUGS9vWbRY97ZAB-HC43Fora-CFV-sejq8aNr-WNDd0mOuUP1XvgDO7gaiGv9UkOtlRBEL_TlWizDmS2buTrKWCu2C6x8U1_NR5dfjF0sKdADA4DSLxxTwiuImXNHbtkhbZjbzpMn5CYlkuydbn2Rlg4lNAV91k2zWaM4op1IQO2g8iWmK_vgOX-iKOckNfKPafRF1mHHAg553ZHX8dTc_Dnfu31rDguXZt9mtN5Y9QZsBKd99u0A5vaDsaJjLGcfgSoQB1pwI3T8CVj4V5ppiTJLo8fU-2b7Q6kQ-vARV6lWZbmPhTAXwU7ZKDloRCHUopv1U2A")])
                                     .json(&map)
                                     .send()

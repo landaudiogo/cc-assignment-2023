@@ -32,6 +32,11 @@ async fn main() {
             .long("group-id")
             .action(ArgAction::Set)
         )
+        .arg(Arg::new("notifications-host")
+            .required(true)
+            .long("notifications-host")
+            .action(ArgAction::Set)
+        )
         .get_matches();
 
     let consume_config = ConsumeConfiguration::from(&mut matches);
