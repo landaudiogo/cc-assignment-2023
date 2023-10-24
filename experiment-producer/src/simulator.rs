@@ -422,8 +422,19 @@ impl<'a> Iterator for IterMut<'a> {
             self.sample.cur += absolute_val;
         }
         self.iteration += 1;
-        info!(avg_temperature = self.sample.cur);
-        Some(*self.sample)
+        let ret = if (self.sample.cur - self.sample.temp_range.upper_threshold).abs() <= 0.01 {
+            let mut sample = self.sample.clone();
+            sample.cur = self.sample.temp_range.upper_threshold - 0.011;
+            sample
+        } else if (self.sample.cur - self.sample.temp_range.lower_threshold).abs() <= 0.01 {
+            let mut sample = self.sample.clone();
+            sample.cur = self.sample.temp_range.lower_threshold + 0.011;
+            sample
+        } else {
+            self.sample.clone()
+        };
+        info!(avg_temperature = ret.cur);
+        Some(ret)
     }
 }
 
@@ -447,4 +458,32 @@ pub fn compute_sensor_temperatures(
     info!(sensor = sensor_id, temperature = sensor_temperature);
     sensor_events.push((sensor_id, sensor_temperature));
     sensor_events
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn threshold_boundaries_precision() {
+        let mut sample = TemperatureSample {
+            cur: 9.0,
+            temp_range: TempRange::new(10.0, 12.0).unwrap(),
+        };
+        let mut stabilization_iter = sample.stabilization_samples(2);
+        let next_sample = stabilization_iter.next().unwrap();
+        assert!((next_sample.cur() - next_sample.temp_range.lower_threshold).abs() > 0.01);
+        let next_sample = stabilization_iter.next().unwrap();
+        assert!(next_sample.cur == 11.0);
+
+        let mut sample = TemperatureSample {
+            cur: 13.0,
+            temp_range: TempRange::new(10.0, 12.0).unwrap(),
+        };
+        let mut stabilization_iter = sample.stabilization_samples(2);
+        let next_sample = stabilization_iter.next().unwrap();
+        assert!((next_sample.cur() - next_sample.temp_range.upper_threshold).abs() > 0.01);
+        let next_sample = stabilization_iter.next().unwrap();
+        assert!(next_sample.cur == 11.0);
+    }
 }
