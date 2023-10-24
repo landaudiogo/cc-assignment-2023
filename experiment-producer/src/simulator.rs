@@ -258,7 +258,6 @@ impl Experiment {
                     self.config.sample_rate,
                 )
                 .await;
-            self.measurements.push(measurement);
         }
     }
 
