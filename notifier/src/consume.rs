@@ -133,42 +133,50 @@ impl Consume {
                             break;
                         }
                         let mut map = HashMap::new();
-                        map.insert("researcher", hash_data.researcher.as_str());
-                        map.insert("measurement_id", hash_data.measurement_id.as_str());
-                        map.insert("experiment_id", hash_data.experiment_id.as_str());
-                        map.insert("cipher_data", &sensor_measurement.measurement_hash);
+                        map.insert("researcher", hash_data.researcher);
+                        map.insert("measurement_id", hash_data.measurement_id);
+                        map.insert("experiment_id", hash_data.experiment_id);
+                        map.insert("cipher_data", sensor_measurement.measurement_hash);
                         match hash_data.notification_type {
                             Some(NotificationType::OutOfRange) => {
-                                let sleep_secs = {
-                                    let mut rng = rand::thread_rng();
-                                    rng.gen_range(0..5)
-                                };
-                                time::sleep(Duration::from_millis(sleep_secs*1000)).await;
-                                map.insert("notification_type", "OutOfRange");
-                                self.client
-                                    .post(format!("http://{}:3000/api/notify", self.config.notifications_host))
-                                    .query(&[("token", "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJleHAiOjE3MDQxMjk4MTgsInN1YiI6ImxhbmRhdSJ9.Gvdz0IuwRPd0BloUGS9vWbRY97ZAB-HC43Fora-CFV-sejq8aNr-WNDd0mOuUP1XvgDO7gaiGv9UkOtlRBEL_TlWizDmS2buTrKWCu2C6x8U1_NR5dfjF0sKdADA4DSLxxTwiuImXNHbtkhbZjbzpMn5CYlkuydbn2Rlg4lNAV91k2zWaM4op1IQO2g8iWmK_vgOX-iKOckNfKPafRF1mHHAg553ZHX8dTc_Dnfu31rDguXZt9mtN5Y9QZsBKd99u0A5vaDsaJjLGcfgSoQB1pwI3T8CVj4V5ppiTJLo8fU-2b7Q6kQ-vARV6lWZbmPhTAXwU7ZKDloRCHUopv1U2A")])
-                                    .json(&map)
-                                    .send()
-                                    .await
-                                    .expect("Failed to notify");
-                                println!("Notify {:?}", map.get("measurement_id"));
+                                let client = self.client.clone();
+                                let notifications_host = self.config.notifications_host.clone();
+                                tokio::spawn(async move {
+                                    let sleep_secs = {
+                                        let mut rng = rand::thread_rng();
+                                        rng.gen_range(0..5)
+                                    };
+                                    time::sleep(Duration::from_millis(sleep_secs*1000)).await;
+                                    map.insert("notification_type", "OutOfRange".into());
+                                    client
+                                        .post(format!("http://{}:3000/api/notify", notifications_host))
+                                        .query(&[("token", "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJleHAiOjE3MDQxMjk4MTgsInN1YiI6ImxhbmRhdSJ9.Gvdz0IuwRPd0BloUGS9vWbRY97ZAB-HC43Fora-CFV-sejq8aNr-WNDd0mOuUP1XvgDO7gaiGv9UkOtlRBEL_TlWizDmS2buTrKWCu2C6x8U1_NR5dfjF0sKdADA4DSLxxTwiuImXNHbtkhbZjbzpMn5CYlkuydbn2Rlg4lNAV91k2zWaM4op1IQO2g8iWmK_vgOX-iKOckNfKPafRF1mHHAg553ZHX8dTc_Dnfu31rDguXZt9mtN5Y9QZsBKd99u0A5vaDsaJjLGcfgSoQB1pwI3T8CVj4V5ppiTJLo8fU-2b7Q6kQ-vARV6lWZbmPhTAXwU7ZKDloRCHUopv1U2A")])
+                                        .json(&map)
+                                        .send()
+                                        .await
+                                        .expect("Failed to notify");
+                                    println!("Notify {:?}", map.get("measurement_id"));
+                                });
                             }
                             Some(NotificationType::Stabilized) => {
-                                let sleep_secs = {
-                                    let mut rng = rand::thread_rng();
-                                    rng.gen_range(0..5)
-                                };
-                                time::sleep(Duration::from_millis(sleep_secs*1000)).await;
-                                map.insert("notification_type", "Stabilized");
-                                self.client
-                                    .post(format!("http://{}:3000/api/notify", self.config.notifications_host))
-                                    .query(&[("token", "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJleHAiOjE3MDQxMjk4MTgsInN1YiI6ImxhbmRhdSJ9.Gvdz0IuwRPd0BloUGS9vWbRY97ZAB-HC43Fora-CFV-sejq8aNr-WNDd0mOuUP1XvgDO7gaiGv9UkOtlRBEL_TlWizDmS2buTrKWCu2C6x8U1_NR5dfjF0sKdADA4DSLxxTwiuImXNHbtkhbZjbzpMn5CYlkuydbn2Rlg4lNAV91k2zWaM4op1IQO2g8iWmK_vgOX-iKOckNfKPafRF1mHHAg553ZHX8dTc_Dnfu31rDguXZt9mtN5Y9QZsBKd99u0A5vaDsaJjLGcfgSoQB1pwI3T8CVj4V5ppiTJLo8fU-2b7Q6kQ-vARV6lWZbmPhTAXwU7ZKDloRCHUopv1U2A")])
-                                    .json(&map)
-                                    .send()
-                                    .await
-                                    .expect("Failed to notify");
-                                println!("Notify {:?}", map.get("measurement_id"));
+                                let client = self.client.clone();
+                                let notifications_host = self.config.notifications_host.clone();
+                                tokio::spawn(async move {
+                                    let sleep_secs = {
+                                        let mut rng = rand::thread_rng();
+                                        rng.gen_range(0..5)
+                                    };
+                                    time::sleep(Duration::from_millis(sleep_secs*1000)).await;
+                                    map.insert("notification_type", "Stabilized".into());
+                                    client
+                                        .post(format!("http://{}:3000/api/notify", notifications_host))
+                                        .query(&[("token", "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJleHAiOjE3MDQxMjk4MTgsInN1YiI6ImxhbmRhdSJ9.Gvdz0IuwRPd0BloUGS9vWbRY97ZAB-HC43Fora-CFV-sejq8aNr-WNDd0mOuUP1XvgDO7gaiGv9UkOtlRBEL_TlWizDmS2buTrKWCu2C6x8U1_NR5dfjF0sKdADA4DSLxxTwiuImXNHbtkhbZjbzpMn5CYlkuydbn2Rlg4lNAV91k2zWaM4op1IQO2g8iWmK_vgOX-iKOckNfKPafRF1mHHAg553ZHX8dTc_Dnfu31rDguXZt9mtN5Y9QZsBKd99u0A5vaDsaJjLGcfgSoQB1pwI3T8CVj4V5ppiTJLo8fU-2b7Q6kQ-vARV6lWZbmPhTAXwU7ZKDloRCHUopv1U2A")])
+                                        .json(&map)
+                                        .send()
+                                        .await
+                                        .expect("Failed to notify");
+                                    println!("Notify {:?}", map.get("measurement_id"));
+                                });
                             }
                             _ => {}
                         }

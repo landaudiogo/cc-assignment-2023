@@ -43,7 +43,7 @@ impl Api {
         map: Data<&Arc<DashMap<String, ExperimentDocument>>>,
         params: Query<TemperatureQueryParams>,
     ) -> PlainText<String> {
-        time::sleep(Duration::from_millis(100)).await;
+        time::sleep(Duration::from_millis(15)).await;
         let map = map.0;
         let TemperatureQueryParams {
             experiment_id,
@@ -76,7 +76,7 @@ impl Api {
         map: Data<&Arc<DashMap<String, ExperimentDocument>>>,
         params: Query<OutOfBoundsQueryParams>,
     ) -> PlainText<String> {
-        time::sleep(Duration::from_millis(100)).await;
+        time::sleep(Duration::from_millis(15)).await;
         let OutOfBoundsQueryParams { experiment_id } = params.0;
         let experiment = map
             .get(&experiment_id)
