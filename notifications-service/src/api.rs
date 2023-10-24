@@ -222,8 +222,8 @@ impl Api {
         );
 
         info!(
-            "measurement_id: {}\tlatency: {}s",
-            body.measurement_id, latency
+            "group: {:?}\tmeasurement_id: {}\tlatency: {}s",
+            subject, body.measurement_id, latency
         );
         Ok(NotifyResponse::Ok(PlainText(format!("{}", latency))))
     }

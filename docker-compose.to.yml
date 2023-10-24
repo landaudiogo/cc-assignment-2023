@@ -1,0 +1,37 @@
+version: '3.8'
+services:
+  toapi:
+    image: toapi
+    command: 
+      - "--secret-key" 
+      - "${SECRET_KEY}"
+      - "--brokers"
+      - "${BROKERS}"
+      - "--topic"
+      - "experiment-document"
+      - "--group-id"
+      - "toapi-rand-20231024"
+    ports:
+      - '3003:3003'
+    extra_hosts: 
+      - host.docker.internal:host-gateway
+    volumes:
+      - ./auth:/app/auth
+
+  notifier:
+    image: notifier
+    command: 
+      - "--secret-key" 
+      - "${SECRET_KEY}"
+      - "--brokers"
+      - "${BROKERS}"
+      - "--topic"
+      - "experiment"
+      - "--group-id"
+      - "notifier-rand-20231024"
+      - "--notifications-host"
+      - "${NOTIFIER_NOTIFICATIONS_HOST}"
+    extra_hosts: 
+      - host.docker.internal:host-gateway
+    volumes:
+      - ./auth:/app/auth
