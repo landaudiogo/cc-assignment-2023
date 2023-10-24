@@ -73,10 +73,10 @@ impl Consume {
             .set("session.timeout.ms", "6000")
             .set("enable.auto.commit", "true")
             .set("security.protocol", "SSL")
-            .set("ssl.ca.location", "http-load-generator/auth/ca.crt")
+            .set("ssl.ca.location", "auth/ca.crt")
             .set(
                 "ssl.keystore.location",
-                "http-load-generator/auth/kafka.keystore.pkcs12",
+                "auth/kafka.keystore.pkcs12",
             )
             .set("ssl.keystore.password", "cc2023")
             .create_with_context(context)
