@@ -1,0 +1,80 @@
+version: '3.8'
+services:
+  experiment-producer:
+    image: dclandau/demo-producer
+    build: 
+      context: ./
+      args: 
+        PACKAGE: experiment-producer
+    command: 
+      - "--secret-key" 
+      - "${SECRET_KEY}"
+      - "--brokers"
+      - "${BROKERS}"
+      - "--topic"
+      - "experiment"
+      - "--topic-document"
+      - "experiment-document"
+      - "--config-file"
+      - "config.json"
+    ports:
+      - '3001:3001'
+    extra_hosts: 
+      - host.docker.internal:host-gateway
+    volumes:
+      - ./experiment-producer/auth:/app/experiment-producer/auth
+      - ./experiment-producer/.env.docker:/app/experiment-producer/.env
+      - ./experiment-producer/config.json:/app/config.json
+
+  notifications-service:
+    image: dclandau/demo-notifications
+    build: 
+      context: ./
+      args: 
+        PACKAGE: notifications-service
+    command: 
+      - "--secret-key" 
+      - "${SECRET_KEY}"
+      - "--external-ip"
+      - "${NOTIFICATIONS_EXTERNAL_IP}"
+    ports:
+      - "3000:3000"
+    extra_hosts: 
+      - host.docker.internal:host-gateway
+    volumes:
+      - ./notifications-service/.env.docker:/app/notifications-service/.env
+
+  http-load-generator:
+    image: dclandau/demo-http-load-generator
+    build: 
+      context: ./
+      args: 
+        PACKAGE: http-load-generator
+    ports:
+      - "3002:3002"
+    command: 
+      - --brokers 
+      - "${BROKERS}"
+      - --topic 
+      - experiment-document
+      - --group-id 
+      - "${HTTP_CONSUMER_GROUP}"
+      - --consumer-wait-before-send 
+      - "${HTTP_CONSUMER_WAIT_BEFORE_SEND}"
+      - --hosts-file
+      - hosts.json
+      - --min-batch-size
+      - "${HTTP_MIN_BATCH_SIZE}"
+      - --max-batch-size
+      - "${HTTP_MAX_BATCH_SIZE}"
+      - --num-generations
+      - "${HTTP_NUM_GENERATIONS}" 
+      - --requestor-lag 
+      - "5" 
+      - --requestor-retries
+      - "2" 
+      - --stable-rate-duration
+      - "60"
+    volumes:
+      - ./http-load-generator/auth:/app/http-load-generator/auth
+      - ./http-load-generator/hosts.json:/app/hosts.json
