@@ -16,6 +16,6 @@ fn main() {
         .get_matches();
 
     let claims = Claims::new(matches.remove_one::<String>("client-id").expect("required"));
-    let token = encode(&claims);
-    println!("{:?}", token);
+    let token = encode(&claims).unwrap();
+    println!("{}", token);
 }
