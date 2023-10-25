@@ -72,7 +72,7 @@ services:
       - --requestor-lag 
       - "5" 
       - --requestor-retries
-      - "2" 
+      - "0" 
       - --stable-rate-duration
       - "60"
     extra_hosts: 
