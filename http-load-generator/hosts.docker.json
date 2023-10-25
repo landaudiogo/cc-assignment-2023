@@ -1,0 +1,10 @@
+[
+    {
+        "host_name": "landau",
+        "base_url": "http://host.docker.internal:3003"
+    },
+    {
+        "host_name": "group14",
+        "base_url": "http://host.docker.internal:3003"
+    }
+]
