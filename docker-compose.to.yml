@@ -8,9 +8,9 @@ services:
       - "--brokers"
       - "${BROKERS}"
       - "--topic"
-      - "experiment-document"
+      - "${TOPIC_DOCUMENT}"
       - "--group-id"
-      - "toapi-rand-20231024"
+      - "${TOAPI_CONSUMER_GROUP}"
     ports:
       - '3003:3003'
     extra_hosts: 
@@ -26,9 +26,9 @@ services:
       - "--brokers"
       - "${BROKERS}"
       - "--topic"
-      - "experiment"
+      - "${TOPIC}"
       - "--group-id"
-      - "notifier-rand-20231024"
+      - "${NOTIFIER_CONSUMER_GROUP}"
       - "--notifications-host"
       - "${NOTIFIER_NOTIFICATIONS_HOST}"
     extra_hosts: 

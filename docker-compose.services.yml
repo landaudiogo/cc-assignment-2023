@@ -12,9 +12,9 @@ services:
       - "--brokers"
       - "${BROKERS}"
       - "--topic"
-      - "experiment"
+      - "${TOPIC}"
       - "--topic-document"
-      - "experiment-document"
+      - "${TOPIC_DOCUMENT}"
       - "--config-file"
       - "config.json"
     ports:
@@ -56,7 +56,7 @@ services:
       - --brokers 
       - "${BROKERS}"
       - --topic 
-      - experiment-document
+      - ${TOPIC_DOCUMENT}
       - --group-id 
       - "${HTTP_CONSUMER_GROUP}"
       - --consumer-wait-before-send 
@@ -72,7 +72,7 @@ services:
       - --requestor-lag 
       - "5" 
       - --requestor-retries
-      - "0" 
+      - "${HTTP_RETRIES}" 
       - --stable-rate-duration
       - "60"
     extra_hosts: 

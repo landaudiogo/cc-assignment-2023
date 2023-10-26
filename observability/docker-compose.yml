@@ -6,7 +6,7 @@ services:
       - ./prometheus-config.yml:/etc/prometheus/prometheus.yml
       - prometheus-data:/prometheus
     ports: 
-      - 3008:9090
+      - 3005:9090
     extra_hosts: 
       - host.docker.internal:host-gateway
       - experiment-producer-host:${EXPERIMENT_PRODUCER_HOST}
