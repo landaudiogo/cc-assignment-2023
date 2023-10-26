@@ -1,6 +1,4 @@
-
-To get your setup ready for the demo, there are a few changes you will have to
-make to your infrastructure to make sure we correctly evaluate your setup:
+Follow these steps to prepare your setup for the demo:
 
 1. The first change involves how you notify the `notifications-service`.
 
