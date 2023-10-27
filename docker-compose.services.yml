@@ -23,7 +23,7 @@ services:
       - host.docker.internal:host-gateway
     volumes:
       - ./experiment-producer/auth:/app/experiment-producer/auth
-      - ./experiment-producer/.env.docker:/app/experiment-producer/.env
+      - ./experiment-producer/.env:/app/experiment-producer/.env
       - ./experiment-producer/config.json:/app/config.json
 
   notifications-service:
@@ -42,7 +42,7 @@ services:
     extra_hosts: 
       - host.docker.internal:host-gateway
     volumes:
-      - ./notifications-service/.env.docker:/app/notifications-service/.env
+      - ./notifications-service/.env:/app/notifications-service/.env
 
   http-load-generator:
     image: dclandau/demo-http-load-generator
@@ -79,4 +79,4 @@ services:
       - host.docker.internal:host-gateway
     volumes:
       - ./auth:/app/auth
-      - ./http-load-generator/hosts.docker.json:/app/hosts.json
+      - ./http-load-generator/hosts.json:/app/hosts.json
