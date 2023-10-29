@@ -73,6 +73,8 @@ services:
       - "5" 
       - --requestor-retries
       - "${HTTP_RETRIES}" 
+      - --requestor-max-in-flight
+      - "${HTTP_MAX_IN_FLIGHT}" 
       - --stable-rate-duration
       - "60"
     extra_hosts: 
