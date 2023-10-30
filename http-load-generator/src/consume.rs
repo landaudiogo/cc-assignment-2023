@@ -101,6 +101,7 @@ impl Consume {
                         let wait_before_tx = self.config.wait_before_tx as u64;
                         tokio::spawn(async move {
                             time::sleep(Duration::from_millis(wait_before_tx * 1000)).await;
+                            println!("experiment: {}", experiment_document.experiment);
                             tx.send(experiment_document)
                                 .await
                                 .expect("Receiver available");

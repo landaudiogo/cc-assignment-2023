@@ -70,7 +70,7 @@ impl Api {
         }
     }
 
-    #[oai(path = "/temperature/out-of-bounds", method = "get")]
+    #[oai(path = "/temperature/out-of-range", method = "get")]
     async fn out_of_bounds(
         &self,
         map: Data<&Arc<DashMap<String, ExperimentDocument>>>,

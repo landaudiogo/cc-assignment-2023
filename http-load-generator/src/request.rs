@@ -122,7 +122,10 @@ impl Requestor {
 
         let mut measurements: Vec<Measurement> = match serde_json::from_str(&content) {
             Ok(measurements) => measurements,
-            Err(_) => return Err(ResponseError::DeserializationError),
+            Err(e) => {
+                println!("Group: {}\tError: {:?}\nContent: {}", self.host.host_name, e, content);
+                return Err(ResponseError::DeserializationError);
+            }
         };
         measurements.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
@@ -165,7 +168,7 @@ impl Requestor {
         experiment: Arc<RwLock<ExperimentDocument>>,
     ) -> RequestBuilder {
         self.client
-            .get(format!("{}/temperature/out-of-bounds", self.host.base_url))
+            .get(format!("{}/temperature/out-of-range", self.host.base_url))
             .query(&[("experiment-id", experiment.read().await.experiment.as_str())])
     }
 
@@ -186,7 +189,10 @@ impl Requestor {
 
         let mut measurements: Vec<Measurement> = match serde_json::from_str(&content) {
             Ok(measurements) => measurements,
-            Err(_) => return Err(ResponseError::DeserializationError),
+            Err(e) => {
+                println!("Group: {}\tError: {:?}\nContent: {}", self.host.host_name, e, content);
+                return Err(ResponseError::DeserializationError)
+            }
         };
         measurements.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
