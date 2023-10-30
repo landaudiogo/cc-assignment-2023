@@ -1,7 +1,7 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Measurement {
     pub timestamp: f64,
     pub temperature: f32,
@@ -150,7 +150,7 @@ impl ExperimentDocument {
             (_, None) => return None,
             (_, _) => (start.unwrap(), end.unwrap()),
         };
-        if start >= end {
+        if start > end {
             Some(&self.measurements[start..start])
         } else {
             Some(&self.measurements[start..end + 1])
@@ -314,6 +314,31 @@ mod tests {
                 temperature: 20.0,
             },
         ];
+        assert!(v1 == v2);
+    }
+
+    #[test]
+    fn edge_case() {
+        let e1: ExperimentDocument = ExperimentDocumentData {
+            experiment: "1234".into(),
+            measurements: vec![Measurement {
+                timestamp: 1698695808.2251582,
+                temperature: -7.32378,
+            }],
+            temperature_range: TempRange {
+                upper_threshold: 20.0,
+                lower_threshold: 10.0,
+            },
+        }
+        .into();
+        let v1 = e1
+            .get_measurements_slice(1698695808.225, 1698695808.226)
+            .expect("Should not error");
+        let v2 = &[Measurement {
+            timestamp: 1698695808.2251582,
+            temperature: -7.32378,
+        }];
+        println!("{:?} {:?}", v1, v2);
         assert!(v1 == v2);
     }
 }

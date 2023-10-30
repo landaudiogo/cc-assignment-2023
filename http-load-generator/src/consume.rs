@@ -65,10 +65,7 @@ impl Consume {
             .set("enable.auto.commit", "true")
             .set("security.protocol", "SSL")
             .set("ssl.ca.location", "auth/ca.crt")
-            .set(
-                "ssl.keystore.location",
-                "auth/kafka.keystore.pkcs12",
-            )
+            .set("ssl.keystore.location", "auth/kafka.keystore.pkcs12")
             .set("ssl.keystore.password", "cc2023")
             .create_with_context(context)
             .expect("Consumer creation failed");

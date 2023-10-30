@@ -122,7 +122,7 @@ impl ExperimentDocument {
             (_, None) => return None,
             (_, _) => (start.unwrap(), end.unwrap()),
         };
-        if start >= end {
+        if start > end {
             Some(&self.measurements[start..start])
         } else {
             Some(&self.measurements[start..end + 1])

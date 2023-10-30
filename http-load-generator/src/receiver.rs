@@ -51,9 +51,7 @@ impl From<&mut ArgMatches> for ExperimentReceiverConfig {
         let stable_rate = args
             .remove_one::<u16>("stable-rate-duration")
             .expect("Required");
-        let num_generations = args
-            .remove_one::<u8>("num-generations")
-            .expect("Required");
+        let num_generations = args.remove_one::<u8>("num-generations").expect("Required");
         let requestor_config = RequestorConfiguration::from(args);
         Self {
             requestor_config,

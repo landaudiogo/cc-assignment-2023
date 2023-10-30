@@ -115,6 +115,7 @@ impl Requestor {
             }
         };
 
+        let url = response.url().clone();
         let content = match response.text().await {
             Ok(content) => content,
             Err(_) => return Err(ResponseError::BodyDecodingError),
@@ -123,7 +124,10 @@ impl Requestor {
         let mut measurements: Vec<Measurement> = match serde_json::from_str(&content) {
             Ok(measurements) => measurements,
             Err(e) => {
-                println!("Group: {}\tError: {:?}\nContent: {}", self.host.host_name, e, content);
+                println!(
+                    "Group: {}\tError: {:?}\nContent: {}",
+                    self.host.host_name, e, content
+                );
                 return Err(ResponseError::DeserializationError);
             }
         };
@@ -135,6 +139,13 @@ impl Requestor {
             .expect("Valid start and end times");
 
         if measurements_cmp != measurements {
+            println!(
+                "Group: {}\nQuery: {:?}\nGround truth: {}\nReceived: {}",
+                self.host.host_name,
+                url,
+                serde_json::to_string(&measurements_cmp).unwrap(),
+                serde_json::to_string(&measurements).unwrap(),
+            );
             Err(ResponseError::ValidationError)
         } else {
             Ok(())
@@ -182,6 +193,7 @@ impl Requestor {
             Err(_) => return Err(ResponseError::ServerError),
         };
 
+        let url = response.url().clone();
         let content = match response.text().await {
             Ok(content) => content,
             Err(_) => return Err(ResponseError::BodyDecodingError),
@@ -190,8 +202,11 @@ impl Requestor {
         let mut measurements: Vec<Measurement> = match serde_json::from_str(&content) {
             Ok(measurements) => measurements,
             Err(e) => {
-                println!("Group: {}\tError: {:?}\nContent: {}", self.host.host_name, e, content);
-                return Err(ResponseError::DeserializationError)
+                println!(
+                    "Group: {}\tError: {:?}\nContent: {}",
+                    self.host.host_name, e, content
+                );
+                return Err(ResponseError::DeserializationError);
             }
         };
         measurements.sort_by(|a, b| a.partial_cmp(b).unwrap());
@@ -207,6 +222,13 @@ impl Requestor {
         let experiment_read = experiment.read().await;
         let measurements_cmp = experiment_read.get_cached_out_of_bounds().unwrap();
         if measurements_cmp != measurements {
+            println!(
+                "Group: {}\nQuery: {:?}\nGround truth: {}\nReceived: {}",
+                self.host.host_name,
+                url,
+                serde_json::to_string(&measurements_cmp).unwrap(),
+                serde_json::to_string(&measurements).unwrap()
+            );
             Err(ResponseError::ValidationError)
         } else {
             Ok(())
