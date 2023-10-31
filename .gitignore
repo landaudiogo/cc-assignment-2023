@@ -3,3 +3,4 @@ ca.key
 .env*
 *.log*
 auth/
+config/

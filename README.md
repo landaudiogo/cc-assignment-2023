@@ -426,7 +426,7 @@ GET `/temperature`
 
 **Example Request**:
 ```bash
-curl -X GET http://<your-service>/temperature/out-of-range -G \
+curl -X GET http://<your-service>/temperature -G \
     -d "experiment-id=9ee55bd4-a531-409c-9a64-0398353cadc5" \
     -d "start-time=1691419390.000000" \ 
     -d "end-time=1691419395.000000"

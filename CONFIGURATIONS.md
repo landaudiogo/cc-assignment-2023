@@ -16,7 +16,7 @@
 - `/.env`: 
     - NOTIFICATIONS_EXTERNAL_IP
     - SECRET_KEY
-- `/notifications-service/.{env,env.docker}`
+- `/notifications-service/.env`
     - DATABASE_URL
     - SQLX_OFFLINE
 
@@ -28,7 +28,7 @@
     - TOPIC
     - TOPIC_DOCUMENT
 - `/experiment-producer/auth` 
-- `/experiment-producer/.{env,env.docker}`
+- `/experiment-producer/.env`
     - DATABASE_URL
     - SQLX_OFFLINE
 - `/experiment-produecr/config.json`
@@ -45,7 +45,7 @@
     - HTTP_NUM_GENERATIONS
     - HTTP_RETRIES
 - `/auth`
-- `http-load-generator/hosts.{json,docker.json}`
+- `http-load-generator/hosts.json`
 
 **toapi**:
 
