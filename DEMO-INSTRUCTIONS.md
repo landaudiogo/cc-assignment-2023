@@ -22,7 +22,7 @@ Follow these steps to prepare your setup for the demo:
    - Temperature:
      `http://<your-vm-ip>:3003/temperature?experiment-id=<experiment-id>&start-time=<start-time>&end-time=<end-time>`
    - Out-of-bounds:
-     `http://<your-vm-ip>:3003/temperature/out-of-bounds?experiment-id=<experiment-id>`
+     `http://<your-vm-ip>:3003/temperature/out-of-range?experiment-id=<experiment-id>`
 1. Your prometheus instance should be reachable at `<your-vm-ip>:3008`. Make
    sure that your prometheus instance is exposing the metrics it is scraping
    from the `node_exporter`.
