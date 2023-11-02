@@ -19,6 +19,11 @@ services:
       - host.docker.internal:host-gateway
     environment: 
       - SERVICE_ENVIRONMENT=${SERVICE_ENVIRONMENT}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: 5
     volumes:
       - ./experiment-producer/auth:/app/experiment-producer/auth
       - ./experiment-producer/.env:/app/experiment-producer/.env
@@ -37,6 +42,11 @@ services:
       - host.docker.internal:host-gateway
     environment: 
       - SERVICE_ENVIRONMENT=${SERVICE_ENVIRONMENT}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: 5
     volumes:
       - ./notifications-service/.env:/app/notifications-service/.env
 
@@ -73,6 +83,11 @@ services:
       - host.docker.internal:host-gateway
     environment: 
       - SERVICE_ENVIRONMENT=${SERVICE_ENVIRONMENT}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: 5
     volumes:
       - ./auth:/app/auth
       - ./http-load-generator/hosts.json:/app/hosts.json

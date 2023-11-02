@@ -2,9 +2,8 @@
 
 packages=(
     notifications-service 
-    exepriment-producer 
+    experiment-producer 
     http-load-generator 
-    notifications-service 
     notifier 
     test-to-api
 )

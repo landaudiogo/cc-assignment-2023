@@ -17,6 +17,11 @@ services:
       - host.docker.internal:host-gateway
     environment: 
       - SERVICE_ENVIRONMENT=${SERVICE_ENVIRONMENT}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: 5
     volumes:
       - ./auth:/app/auth
 
@@ -37,5 +42,10 @@ services:
       - host.docker.internal:host-gateway
     environment: 
       - SERVICE_ENVIRONMENT=${SERVICE_ENVIRONMENT}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: 5
     volumes:
       - ./auth:/app/auth
