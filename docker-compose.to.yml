@@ -1,7 +1,7 @@
 version: '3.8'
 services:
   toapi:
-    image: toapi
+    image: dclandau/demo-test-to-api
     command: 
       - "--secret-key" 
       - "${SECRET_KEY}"
@@ -15,11 +15,13 @@ services:
       - '3003:3003'
     extra_hosts: 
       - host.docker.internal:host-gateway
+    environment: 
+      - SERVICE_ENVIRONMENT=${SERVICE_ENVIRONMENT}
     volumes:
       - ./auth:/app/auth
 
   notifier:
-    image: notifier
+    image: dclandau/demo-notifier
     command: 
       - "--secret-key" 
       - "${SECRET_KEY}"
@@ -33,5 +35,7 @@ services:
       - "${NOTIFIER_NOTIFICATIONS_HOST}"
     extra_hosts: 
       - host.docker.internal:host-gateway
+    environment: 
+      - SERVICE_ENVIRONMENT=${SERVICE_ENVIRONMENT}
     volumes:
       - ./auth:/app/auth

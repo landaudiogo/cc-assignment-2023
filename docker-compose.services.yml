@@ -1,11 +1,7 @@
 version: '3.8'
 services:
   experiment-producer:
-    image: dclandau/demo-producer
-    build: 
-      context: ./
-      args: 
-        PACKAGE: experiment-producer
+    image: dclandau/demo-experiment-producer
     command: 
       - "--secret-key" 
       - "${SECRET_KEY}"
@@ -21,17 +17,15 @@ services:
       - '3001:3001'
     extra_hosts: 
       - host.docker.internal:host-gateway
+    environment: 
+      - SERVICE_ENVIRONMENT=${SERVICE_ENVIRONMENT}
     volumes:
       - ./experiment-producer/auth:/app/experiment-producer/auth
       - ./experiment-producer/.env:/app/experiment-producer/.env
       - ./experiment-producer/config.json:/app/config.json
 
   notifications-service:
-    image: dclandau/demo-notifications
-    build: 
-      context: ./
-      args: 
-        PACKAGE: notifications-service
+    image: dclandau/demo-notifications-service
     command: 
       - "--secret-key" 
       - "${SECRET_KEY}"
@@ -41,15 +35,13 @@ services:
       - "3000:3000"
     extra_hosts: 
       - host.docker.internal:host-gateway
+    environment: 
+      - SERVICE_ENVIRONMENT=${SERVICE_ENVIRONMENT}
     volumes:
       - ./notifications-service/.env:/app/notifications-service/.env
 
   http-load-generator:
     image: dclandau/demo-http-load-generator
-    build: 
-      context: ./
-      args: 
-        PACKAGE: http-load-generator
     ports:
       - "3002:3002"
     command: 
@@ -79,6 +71,8 @@ services:
       - "60"
     extra_hosts: 
       - host.docker.internal:host-gateway
+    environment: 
+      - SERVICE_ENVIRONMENT=${SERVICE_ENVIRONMENT}
     volumes:
       - ./auth:/app/auth
       - ./http-load-generator/hosts.json:/app/hosts.json
