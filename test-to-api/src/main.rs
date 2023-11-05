@@ -10,7 +10,6 @@ use poem_openapi::{payload::PlainText, OpenApi, OpenApiService};
 use rand::Rng;
 use serde::Deserialize;
 use std::sync::Arc;
-use tokio::time::{self, Duration};
 
 mod consumer;
 
@@ -41,10 +40,11 @@ impl Api {
     async fn temperature(
         &self,
         map: Data<&Arc<DashMap<String, ExperimentDocument>>>,
+        produce_error: Data<&bool>,
         params: Query<TemperatureQueryParams>,
     ) -> PlainText<String> {
-        time::sleep(Duration::from_millis(15)).await;
         let map = map.0;
+        let produce_error = produce_error.0;
         let TemperatureQueryParams {
             experiment_id,
             start_time,
@@ -56,6 +56,10 @@ impl Api {
         let measurements = experiment
             .get_measurements_slice(start_time, end_time)
             .unwrap();
+        
+        if !produce_error {
+            return PlainText(serde_json::to_string(&measurements).unwrap());
+        }
 
         let random_value = {
             let mut rng = rand::thread_rng();
@@ -74,13 +78,14 @@ impl Api {
     async fn out_of_bounds(
         &self,
         map: Data<&Arc<DashMap<String, ExperimentDocument>>>,
+        produce_error: Data<&bool>,
         params: Query<OutOfBoundsQueryParams>,
     ) -> PlainText<String> {
-        time::sleep(Duration::from_millis(15)).await;
         let OutOfBoundsQueryParams { experiment_id } = params.0;
         let experiment = map
             .get(&experiment_id)
             .expect(&format!("Experiment `{:?}` does not exist", experiment_id));
+        let produce_error = produce_error.0;
         let measurements = &experiment.measurements;
         let upper_threshold = experiment.temperature_range.upper_threshold;
         let lower_threshold = experiment.temperature_range.lower_threshold;
@@ -92,6 +97,10 @@ impl Api {
             })
             .map(|measurement| measurement.clone())
             .collect();
+
+        if !produce_error {
+            return PlainText(serde_json::to_string(&measurements).unwrap());
+        }
 
         let random_value = {
             let mut rng = rand::thread_rng();
@@ -136,6 +145,10 @@ async fn main() {
             .long("group-id")
             .action(ArgAction::Set)
         )
+        .arg(Arg::new("produce-errors")
+            .long("produce-errors")
+            .action(ArgAction::SetTrue)
+        )
         .get_matches();
 
     let api_service =
@@ -146,7 +159,8 @@ async fn main() {
     let app = Route::new()
         .nest("/", api_service)
         .nest("/docs", ui)
-        .data(experiments.clone());
+        .data(experiments.clone())
+        .data(matches.remove_one::<bool>("produce-errors").unwrap());
 
     let mut handles = vec![];
 
