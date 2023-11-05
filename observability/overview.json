@@ -253,7 +253,32 @@
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "__systemRef": "hideSeriesFrom",
+            "matcher": {
+              "id": "byNames",
+              "options": {
+                "mode": "exclude",
+                "names": [
+                  "landau"
+                ],
+                "prefix": "All except:",
+                "readOnly": true
+              }
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": true
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
@@ -341,6 +366,12 @@
         "y": 10
       },
       "id": 8,
+      "links": [
+        {
+          "title": "Drill down groups with errors",
+          "url": "https://grafana.cc2023.4400app.me/d/b70e0b86-ee08-43bd-a96b-46bd53b52231/error-overview?orgId=1&from=${__from}&to=${__to}"
+        }
+      ],
       "options": {
         "colorMode": "value",
         "graphMode": "none",
@@ -489,6 +520,12 @@
         "y": 10
       },
       "id": 14,
+      "links": [
+        {
+          "title": "Drill down groups with errors",
+          "url": "https://grafana.cc2023.4400app.me/d/b70e0b86-ee08-43bd-a96b-46bd53b52231/error-overview?orgId=1&from=${__from}&to=${__to}"
+        }
+      ],
       "options": {
         "colorMode": "value",
         "graphMode": "none",
@@ -669,6 +706,92 @@
             "mode": "absolute",
             "steps": [
               {
+                "color": "text",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 3,
+        "x": 5,
+        "y": 15
+      },
+      "id": 16,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.2.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "${DS_POSTGRESQL}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "-- GROUPS WITH ALL LATENCIES < 10s\nSELECT COUNT(*) FROM (\nSELECT \n\tgroup_id\nFROM \n\tdemo.notification_ground_truth gt\nLEFT JOIN\n\tdemo.notification n\n\tON n.experiment_id = gt.experiment_id AND n.measurement_id = gt.measurement_id\nWHERE \n\tgt.insert_timestamp BETWEEN $__timeFrom() AND $__timeTo() \n\tAND n.group_id IS NOT NULL\nGROUP BY\n\tgroup_id\nEXCEPT ALL\nSELECT \n\tgroup_id\nFROM \n  \tdemo.notification_ground_truth gt\nLEFT JOIN\n\tdemo.notification n\n\tON gt.measurement_id = n.measurement_id AND gt.experiment_id = n.experiment_id\nWHERE \n\tn.measurement_id IS NOT NULL\n\tAND gt.insert_timestamp BETWEEN $__timeFrom() AND $__timeTo()  \n  \tAND n.latency > 10\nGROUP BY\n\tn.group_id\n) t1;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "# Groups < 10s",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "${DS_POSTGRESQL}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
                 "color": "red",
                 "value": null
               },
@@ -688,10 +811,16 @@
       "gridPos": {
         "h": 5,
         "w": 3,
-        "x": 5,
+        "x": 8,
         "y": 15
       },
       "id": 15,
+      "links": [
+        {
+          "title": "Drill down groups with errors",
+          "url": "https://grafana.cc2023.4400app.me/d/b70e0b86-ee08-43bd-a96b-46bd53b52231/error-overview?orgId=1&from=${__from}&to=${__to}"
+        }
+      ],
       "options": {
         "colorMode": "value",
         "graphMode": "none",
@@ -738,92 +867,6 @@
         }
       ],
       "title": "# Groups > 10s",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "${DS_POSTGRESQL}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "text",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 0
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 5,
-        "w": 3,
-        "x": 8,
-        "y": 15
-      },
-      "id": 16,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "pluginVersion": "10.2.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "${DS_POSTGRESQL}"
-          },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "-- GROUPS WITH ALL LATENCIES < 10s\nSELECT COUNT(*) FROM (\nSELECT \n\tgroup_id\nFROM \n\tdemo.notification_ground_truth gt\nLEFT JOIN\n\tdemo.notification n\n\tON n.experiment_id = gt.experiment_id AND n.measurement_id = gt.measurement_id\nWHERE \n\tgt.insert_timestamp BETWEEN $__timeFrom() AND $__timeTo() \nGROUP BY\n\tgroup_id\nEXCEPT ALL\nSELECT \n\tgroup_id\nFROM \n  \tdemo.notification_ground_truth gt\nLEFT JOIN\n\tdemo.notification n\n\tON gt.measurement_id = n.measurement_id AND gt.experiment_id = n.experiment_id\nWHERE \n\tn.measurement_id IS NOT NULL\n\tAND gt.insert_timestamp BETWEEN $__timeFrom() AND $__timeTo()  \n  \tAND n.latency > 10\nGROUP BY\n\tn.group_id\n) t1;",
-          "refId": "A",
-          "sql": {
-            "columns": [
-              {
-                "parameters": [],
-                "type": "function"
-              }
-            ],
-            "groupBy": [
-              {
-                "property": {
-                  "type": "string"
-                },
-                "type": "groupBy"
-              }
-            ],
-            "limit": 50
-          }
-        }
-      ],
-      "title": "# Groups < 10s",
       "type": "stat"
     },
     {
@@ -1054,8 +1097,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -1073,6 +1115,12 @@
         "y": 26
       },
       "id": 3,
+      "links": [
+        {
+          "title": "Drill down groups with errors",
+          "url": "https://grafana.cc2023.4400app.me/d/b70e0b86-ee08-43bd-a96b-46bd53b52231/error-overview?orgId=1&from=${__from}&to=${__to}"
+        }
+      ],
       "options": {
         "colorMode": "value",
         "graphMode": "none",
@@ -1121,8 +1169,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -1140,6 +1187,12 @@
         "y": 26
       },
       "id": 5,
+      "links": [
+        {
+          "title": "Drill down groups with errors",
+          "url": "https://grafana.cc2023.4400app.me/d/b70e0b86-ee08-43bd-a96b-46bd53b52231/error-overview?orgId=1&from=${__from}&to=${__to}"
+        }
+      ],
       "options": {
         "colorMode": "value",
         "graphMode": "none",
@@ -1232,8 +1285,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -1328,8 +1380,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -1378,20 +1429,20 @@
       "type": "timeseries"
     }
   ],
-  "refresh": false,
+  "refresh": "5s",
   "schemaVersion": 38,
   "tags": [],
   "templating": {
     "list": []
   },
   "time": {
-    "from": "2023-10-27T09:06:00.000Z",
-    "to": "2023-10-27T09:12:20.000Z"
+    "from": "now-15m",
+    "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "Overview",
   "uid": "d95f7ade-04ba-4ec7-9c8e-9eab85d5af98",
-  "version": 8,
+  "version": 14,
   "weekStart": ""
 }

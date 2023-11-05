@@ -184,7 +184,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(experiment_producer_event_count_total{topic=\"experiment\"}[5s]))",
+          "expr": "sum(rate(experiment_producer_event_count_total{topic=\"$topic\"}[5s]))",
           "instant": false,
           "legendFormat": "events",
           "range": true,
@@ -210,6 +210,7 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
+            "axisSoftMin": 0,
             "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -1059,8 +1060,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -1126,8 +1126,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -1206,6 +1205,8 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
+            "axisSoftMax": 100,
+            "axisSoftMin": 0,
             "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 20,
@@ -1237,8 +1238,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -1278,7 +1278,7 @@
           "editorMode": "code",
           "expr": "(\n  sum(rate(node_cpu_seconds_total{mode!=\"idle\", instance=~\"$group:.+\", job=\"infrastructure-costs\"}[$__range])) / \n  count(node_cpu_seconds_total{mode=\"idle\", instance=~\"$group:.+\", job=\"infrastructure-costs\"})\n) * 100 ",
           "instant": false,
-          "legendFormat": "__auto",
+          "legendFormat": "cpu",
           "range": true,
           "refId": "A"
         }
@@ -1333,8 +1333,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -1374,7 +1373,7 @@
           "editorMode": "code",
           "expr": "node_memory_MemTotal_bytes{instance=~\"$group:.+\", job=\"infrastructure-costs\"} - avg_over_time(node_memory_MemAvailable_bytes{instance=~\"$group:.+\", job=\"infrastructure-costs\"}[$__range])",
           "instant": false,
-          "legendFormat": "__auto",
+          "legendFormat": "memory",
           "range": true,
           "refId": "A"
         }
@@ -1383,7 +1382,7 @@
       "type": "timeseries"
     }
   ],
-  "refresh": false,
+  "refresh": "5s",
   "schemaVersion": 38,
   "tags": [],
   "templating": {
@@ -1391,8 +1390,8 @@
       {
         "current": {
           "selected": false,
-          "text": "landau",
-          "value": "landau"
+          "text": "group1",
+          "value": "group1"
         },
         "hide": 0,
         "includeAll": false,
@@ -1400,7 +1399,7 @@
         "name": "group",
         "options": [
           {
-            "selected": false,
+            "selected": true,
             "text": "group1",
             "value": "group1"
           },
@@ -1474,17 +1473,45 @@
         "queryValue": "landau",
         "skipUrlSync": false,
         "type": "custom"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "experiment",
+          "value": "experiment"
+        },
+        "description": "",
+        "hide": 0,
+        "includeAll": false,
+        "multi": false,
+        "name": "topic",
+        "options": [
+          {
+            "selected": true,
+            "text": "experiment",
+            "value": "experiment"
+          },
+          {
+            "selected": false,
+            "text": "test-experiment",
+            "value": "test-experiment"
+          }
+        ],
+        "query": "experiment,test-experiment",
+        "queryValue": "",
+        "skipUrlSync": false,
+        "type": "custom"
       }
     ]
   },
   "time": {
-    "from": "2023-10-27T09:06:20.950Z",
-    "to": "2023-10-27T09:12:51.712Z"
+    "from": "now-15m",
+    "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "Group View",
   "uid": "d496b29e-14e1-4ec7-b6ae-9b078ba8c81e",
-  "version": 2,
+  "version": 10,
   "weekStart": ""
 }

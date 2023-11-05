@@ -83,6 +83,12 @@
           "color": {
             "mode": "thresholds"
           },
+          "links": [
+            {
+              "title": "Navigate to group dashboard",
+              "url": "https://grafana.cc2023.4400app.me/d/d496b29e-14e1-4ec7-b6ae-9b078ba8c81e/group-view?orgId=1&var-group=${__field.labels.host_name}&from=${__from}&to=${__to}"
+            }
+          ],
           "mappings": [],
           "noValue": "0",
           "thresholds": {
@@ -103,7 +109,7 @@
       },
       "gridPos": {
         "h": 20,
-        "w": 3,
+        "w": 4,
         "x": 0,
         "y": 0
       },
@@ -130,9 +136,9 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by (host_name) (round(delta(notifications_service_response_count_total{response_type!~\"Ok\"}[$__range])))",
+          "expr": "sum by (host_name, response_type) (round(delta(notifications_service_response_count_total{response_type!~\"Ok\"}[$__range])))",
           "instant": false,
-          "legendFormat": "{{response_type}}",
+          "legendFormat": "{{host_name}} {{response_type}}",
           "range": true,
           "refId": "A"
         }
@@ -154,6 +160,12 @@
             },
             "inspect": false
           },
+          "links": [
+            {
+              "title": "Navigate to group dashboard",
+              "url": "https://grafana.cc2023.4400app.me/d/d496b29e-14e1-4ec7-b6ae-9b078ba8c81e/group-view?orgId=1&var-group=${__data.fields.group_id}&from=${__from}&to=${__to}"
+            }
+          ],
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
@@ -173,8 +185,8 @@
       },
       "gridPos": {
         "h": 20,
-        "w": 3,
-        "x": 3,
+        "w": 4,
+        "x": 4,
         "y": 0
       },
       "id": 14,
@@ -238,6 +250,12 @@
             },
             "inspect": false
           },
+          "links": [
+            {
+              "title": "Navigate to group dashboard",
+              "url": "https://grafana.cc2023.4400app.me/d/d496b29e-14e1-4ec7-b6ae-9b078ba8c81e/group-view?orgId=1&var-group=${__data.fields.group_id}&from=${__from}&to=${__to}"
+            }
+          ],
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
@@ -257,8 +275,8 @@
       },
       "gridPos": {
         "h": 20,
-        "w": 3,
-        "x": 6,
+        "w": 4,
+        "x": 8,
         "y": 0
       },
       "id": 15,
@@ -353,7 +371,7 @@
         "colorMode": "value",
         "graphMode": "none",
         "justifyMode": "auto",
-        "orientation": "horizontal",
+        "orientation": "auto",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -426,7 +444,7 @@
         "colorMode": "value",
         "graphMode": "none",
         "justifyMode": "auto",
-        "orientation": "horizontal",
+        "orientation": "auto",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -455,20 +473,20 @@
       "type": "stat"
     }
   ],
-  "refresh": "5s",
+  "refresh": "",
   "schemaVersion": 38,
   "tags": [],
   "templating": {
     "list": []
   },
   "time": {
-    "from": "now-3h",
+    "from": "now-15m",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "Error Overview",
   "uid": "b70e0b86-ee08-43bd-a96b-46bd53b52231",
-  "version": 9,
+  "version": 14,
   "weekStart": ""
 }
